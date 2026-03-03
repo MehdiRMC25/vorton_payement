@@ -48,7 +48,19 @@ export async function createOrder(params: KapitalCreateOrderParams): Promise<Kap
     const text = await res.text();
     throw new Error(`Kapital Bank error (${res.status}): ${text}`);
   }
-  return res.json() as Promise<KapitalOrderResponse>;
+  const data = (await res.json()) as KapitalOrderResponse | { order?: Record<string, unknown> };
+  const raw: Record<string, unknown> =
+    data && typeof data === 'object' && data.order && typeof data.order === 'object'
+      ? data.order
+      : (data as Record<string, unknown>);
+  const order: KapitalOrderResponse = {
+    id: String(raw.id ?? ''),
+    hppUrl: String(raw.hppUrl ?? raw.hpp_url ?? ''),
+    password: String(raw.password ?? ''),
+    status: raw.status != null ? String(raw.status) : undefined,
+    secret: raw.secret != null ? String(raw.secret) : undefined,
+  };
+  return order;
 }
 
 /** Build the URL to redirect the user to Kapital HPP (Hosted Payment Page). */
