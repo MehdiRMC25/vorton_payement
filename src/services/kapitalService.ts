@@ -28,13 +28,15 @@ export async function createOrder(params: KapitalCreateOrderParams): Promise<Kap
   const baseUrl = bank.gatewayUrl.replace(/\/$/, '');
   const url = `${baseUrl}/order/`;
   const credentials = Buffer.from(`${bank.username}:${bank.password}`, 'utf8').toString('base64');
-  const order = {
-    typeRid: 'Order_SMS',
-    amount: params.amount,
-    currency: params.currency,
-    language: params.language ?? 'en',
-    description: params.description ?? 'Payment',
-    hppRedirectUrl: params.hppRedirectUrl,
+  const requestBody = {
+    order: {
+      typeRid: 'Order_SMS',
+      amount: params.amount,
+      currency: params.currency,
+      language: params.language ?? 'en',
+      description: params.description ?? 'Payment',
+      hppRedirectUrl: params.hppRedirectUrl,
+    },
   };
   const res = await fetch(url, {
     method: 'POST',
@@ -42,25 +44,25 @@ export async function createOrder(params: KapitalCreateOrderParams): Promise<Kap
       Authorization: `Basic ${credentials}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ order }),
+    body: JSON.stringify(requestBody),
   });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Kapital Bank error (${res.status}): ${text}`);
   }
-  const data = (await res.json()) as KapitalOrderResponse | { order?: Record<string, unknown> };
+  const data = (await res.json()) as Record<string, unknown> & { order?: Record<string, unknown> };
   const raw: Record<string, unknown> =
     data && typeof data === 'object' && data.order && typeof data.order === 'object'
       ? data.order
-      : (data as Record<string, unknown>);
-  const order: KapitalOrderResponse = {
+      : data;
+  const result: KapitalOrderResponse = {
     id: String(raw.id ?? ''),
     hppUrl: String(raw.hppUrl ?? raw.hpp_url ?? ''),
     password: String(raw.password ?? ''),
     status: raw.status != null ? String(raw.status) : undefined,
     secret: raw.secret != null ? String(raw.secret) : undefined,
   };
-  return order;
+  return result;
 }
 
 /** Build the URL to redirect the user to Kapital HPP (Hosted Payment Page). */
