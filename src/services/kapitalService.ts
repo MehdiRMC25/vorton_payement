@@ -28,7 +28,7 @@ export async function createOrder(params: KapitalCreateOrderParams): Promise<Kap
   const baseUrl = bank.gatewayUrl.replace(/\/$/, '');
   const url = `${baseUrl}/order/`;
   const credentials = Buffer.from(`${bank.username}:${bank.password}`, 'utf8').toString('base64');
-  const body = {
+  const order = {
     typeRid: 'Order_SMS',
     amount: params.amount,
     currency: params.currency,
@@ -42,7 +42,7 @@ export async function createOrder(params: KapitalCreateOrderParams): Promise<Kap
       Authorization: `Basic ${credentials}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ order }),
   });
   if (!res.ok) {
     const text = await res.text();
