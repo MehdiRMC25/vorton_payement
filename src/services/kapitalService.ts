@@ -65,16 +65,10 @@ export async function createOrder(params: KapitalCreateOrderParams): Promise<Kap
   return result;
 }
 
-/** Build the URL to redirect the user to Kapital HPP (Hosted Payment Page). */
+/** Build the URL to redirect the user to Kapital HPP. One /flex only (hppUrl may already contain /flex). */
 export function buildRedirectUrl(order: KapitalOrderResponse): string {
-  // Birbank expects exactly /flex (not /flex/flex). Normalize: use origin from hppUrl + single /flex + query.
-  let origin: string;
-  try {
-    const u = new URL(order.hppUrl);
-    origin = u.origin;
-  } catch {
-    origin = order.hppUrl.replace(/\/flex\/?.*$/i, '').replace(/\/+$/, '');
-  }
+  const urlStr = order.hppUrl.startsWith('http') ? order.hppUrl : `https://${order.hppUrl}`;
+  const origin = new URL(urlStr).origin;
   return `${origin}/flex?id=${encodeURIComponent(order.id)}&password=${encodeURIComponent(order.password)}`;
 }
 

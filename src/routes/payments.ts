@@ -14,8 +14,8 @@ const createPaymentValidators = [
   body('reference').optional().isString().trim(),
   body('customerId').optional().isString().trim(),
   body('customerEmail').optional().isEmail(),
-  body('returnUrl').optional().isURL(),
-  body('cancelUrl').optional().isURL(),
+  body('returnUrl').optional().isURL({ require_tld: false }),
+  body('cancelUrl').optional().isURL({ require_tld: false }),
   body('language').optional().isIn(['en', 'az', 'ru']).withMessage('Use en, az, or ru'),
   body('metadata').optional().isObject(),
 ];
