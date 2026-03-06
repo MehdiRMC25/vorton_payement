@@ -9,6 +9,11 @@ export const config = {
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,https://vorton.uk').split(',').map(s => s.trim()),
   apiKey: process.env.API_KEY ?? '',
   jwtSecret: process.env.JWT_SECRET ?? '',
+  authSecret: process.env.AUTH_SECRET ?? '',
+  authGitHub: {
+    clientId: process.env.AUTH_GITHUB_ID ?? '',
+    clientSecret: process.env.AUTH_GITHUB_SECRET ?? '',
+  },
   // Kapital Bank E-commerce API (Basic Auth)
   bank: {
     gatewayUrl: process.env.KAPITAL_BASE_URL ?? process.env.BANK_GATEWAY_URL ?? '',

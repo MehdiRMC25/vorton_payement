@@ -9,6 +9,7 @@ import { healthRouter } from './routes/health';
 
 const app = express();
 
+app.set('trust proxy', true);
 app.use(helmet());
 app.use(morgan(config.env === 'development' ? 'dev' : 'combined'));
 app.use(cors({
@@ -27,10 +28,39 @@ app.get('/', (_req, res) => {
     version: '1.0.0',
     docs: config.apiPrefix + '/health',
     usage: 'Use ' + config.apiPrefix + '/payments for payment endpoints.',
+    auth: config.authSecret ? config.apiPrefix + '/auth/session' : undefined,
   });
 });
 
-app.listen(config.port, () => {
-  console.log(`Payment backend running on port ${config.port}`);
-  console.log(`API base: ${config.apiPrefix}`);
+async function start(): Promise<void> {
+  if (config.authSecret) {
+    const { ExpressAuth, getSession } = await import('@auth/express');
+    const GitHub = (await import('@auth/express/providers/github')).default;
+    const authConfig = {
+      secret: config.authSecret,
+      providers: config.authGitHub.clientId && config.authGitHub.clientSecret
+        ? [GitHub({ clientId: config.authGitHub.clientId, clientSecret: config.authGitHub.clientSecret })]
+        : [],
+    };
+    app.use('/auth', ExpressAuth(authConfig));
+    app.get(config.apiPrefix + '/auth/session', async (req, res) => {
+      const session = await getSession(req, authConfig);
+      if (!session?.user) {
+        res.status(401).json({ signedIn: false });
+        return;
+      }
+      res.json({ signedIn: true, user: session.user });
+    });
+    console.log('Auth.js mounted at /auth and ' + config.apiPrefix + '/auth/session');
+  }
+
+  app.listen(config.port, () => {
+    console.log(`Payment backend running on port ${config.port}`);
+    console.log(`API base: ${config.apiPrefix}`);
+  });
+}
+
+start().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });
