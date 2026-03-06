@@ -50,6 +50,15 @@ export async function getCustomerByEmail(email: string) {
   return result.rows[0];
 }
 
+/** Find by email or phone. Use only server-side (e.g. login). */
+export async function getCustomerByEmailOrPhone(identifier: string) {
+  const result = await pool.query(
+    `SELECT * FROM customers WHERE email = $1 OR phone = $1`,
+    [identifier.trim()]
+  );
+  return result.rows[0];
+}
+
 /** Use for API responses. Excludes password_hash and password_salt. */
 export async function getCustomerByIdSafe(id: number) {
   const result = await pool.query(

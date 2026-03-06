@@ -25,9 +25,13 @@
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
     "pg": "^8.20.0",
-    "@types/pg": "^8.11.6"
+    "@types/pg": "^8.11.6",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.5",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.2"
   }

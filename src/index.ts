@@ -6,6 +6,8 @@ import { config } from './config';
 import { paymentRouter } from './routes/payments';
 import { webhookRouter } from './routes/webhooks';
 import { healthRouter } from './routes/health';
+import { authRouter } from './routes/auth';
+import * as authController from './controllers/authController';
 
 const app = express();
 
@@ -21,6 +23,9 @@ app.use(express.json());
 app.use(config.apiPrefix + '/health', healthRouter);
 app.use(config.apiPrefix + '/payments', paymentRouter);
 app.use(config.apiPrefix + '/webhooks', webhookRouter);
+app.use(config.apiPrefix + '/auth', authRouter);
+app.post('/auth/signup', authController.signup);
+app.post('/auth/login', authController.login);
 
 app.get('/', (_req, res) => {
   res.json({
