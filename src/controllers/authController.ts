@@ -14,23 +14,40 @@ function membershipNumber(): string {
   return 'VORTON-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
 }
 
+function pickString(body: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = body[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function normalizePhone(input: string | null): string | null {
+  if (!input) {
+    return null;
+  }
+  return input.replace(/\s+/g, '');
+}
+
 /** POST /api/v1/auth/signup */
 export async function signup(req: Request, res: Response): Promise<void> {
   try {
     const body = req.body as Record<string, unknown>;
-    const fullName = typeof body.full_name === 'string' ? body.full_name.trim() : null;
-    const firstName = typeof body.first_name === 'string' ? body.first_name.trim() : null;
-    const lastName = typeof body.last_name === 'string' ? body.last_name.trim() : null;
-    const phone = typeof body.phone === 'string' ? body.phone.trim() : (typeof body.mobile === 'string' ? body.mobile.trim() : null);
-    const email = typeof body.email === 'string' ? body.email.trim() || null : null;
-    const password = typeof body.password === 'string' ? body.password : null;
-    const confirmPassword = typeof body.confirm_password === 'string' ? body.confirm_password : null;
-    const addressLine1 = typeof body.address_line1 === 'string' ? body.address_line1.trim() : null;
-    const addressLine2 = typeof body.address_line2 === 'string' ? body.address_line2.trim() : null;
-    const address = typeof body.address === 'string' ? body.address.trim() : null;
-    const city = typeof body.city === 'string' ? body.city.trim() : null;
-    const postcode = typeof body.postcode === 'string' ? body.postcode.trim() : null;
-    const country = typeof body.country === 'string' ? body.country.trim() : null;
+    const fullName = pickString(body, ['full_name', 'fullName', 'name']);
+    const firstName = pickString(body, ['first_name', 'firstName']);
+    const lastName = pickString(body, ['last_name', 'lastName']);
+    const phone = normalizePhone(pickString(body, ['phone', 'phoneNumber', 'mobile', 'mobileNumber', 'mobile_number']));
+    const email = pickString(body, ['email']);
+    const password = pickString(body, ['password']);
+    const confirmPassword = pickString(body, ['confirm_password', 'confirmPassword', 'passwordConfirmation', 'password_confirmation']) ?? password;
+    const addressLine1 = pickString(body, ['address_line1', 'addressLine1']);
+    const addressLine2 = pickString(body, ['address_line2', 'addressLine2']);
+    const address = pickString(body, ['address']);
+    const city = pickString(body, ['city']);
+    const postcode = pickString(body, ['postcode', 'postal_code', 'postalCode', 'zip', 'zipCode']);
+    const country = pickString(body, ['country']);
 
     if (!phone) {
       res.status(400).json({ error: 'Mobile number is required.' });
@@ -72,7 +89,8 @@ export async function signup(req: Request, res: Response): Promise<void> {
       }
     }
 
-    const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
+    const password_salt = await bcrypt.genSalt(SALT_ROUNDS);
+    const password_hash = await bcrypt.hash(password, password_salt);
     const membership_number = membershipNumber();
 
     const row = await createCustomer({
@@ -81,7 +99,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
       email,
       phone,
       password_hash,
-      password_salt: null,
+      password_salt,
       membership_number,
       address_line1: addressLine1 || (address || null),
       address_line2: addressLine2 || null,
@@ -91,8 +109,9 @@ export async function signup(req: Request, res: Response): Promise<void> {
     });
 
     const user = await getCustomerByIdSafe(row.id);
-    const token = config.jwtSecret
-      ? jwt.sign({ sub: row.id }, config.jwtSecret, { expiresIn: '7d' })
+    const jwtKey = config.jwtSecret || config.authSecret;
+    const token = jwtKey
+      ? jwt.sign({ sub: row.id }, jwtKey, { expiresIn: '7d' })
       : null;
 
     res.status(201).json({
@@ -109,8 +128,9 @@ export async function signup(req: Request, res: Response): Promise<void> {
 export async function login(req: Request, res: Response): Promise<void> {
   try {
     const body = req.body as Record<string, unknown>;
-    const loginId = typeof body.email === 'string' ? body.email.trim() : (typeof body.phone === 'string' ? body.phone.trim() : (typeof body.mobile === 'string' ? body.mobile.trim() : null));
-    const password = typeof body.password === 'string' ? body.password : null;
+    const loginIdRaw = pickString(body, ['email', 'phone', 'phoneNumber', 'mobile', 'mobileNumber', 'mobile_number', 'login', 'username']);
+    const loginId = loginIdRaw?.includes('@') ? loginIdRaw : normalizePhone(loginIdRaw);
+    const password = pickString(body, ['password']);
 
     if (!loginId || !password) {
       res.status(400).json({ error: 'Email or mobile number and password are required.' });
@@ -130,8 +150,9 @@ export async function login(req: Request, res: Response): Promise<void> {
     }
 
     const user = await getCustomerByIdSafe(customer.id);
-    const token = config.jwtSecret
-      ? jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' })
+    const jwtKey = config.jwtSecret || config.authSecret;
+    const token = jwtKey
+      ? jwt.sign({ sub: customer.id }, jwtKey, { expiresIn: '7d' })
       : null;
 
     res.json({
@@ -148,12 +169,13 @@ export async function login(req: Request, res: Response): Promise<void> {
 export async function me(req: Request, res: Response): Promise<void> {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token || !config.jwtSecret) {
+  const jwtKey = config.jwtSecret || config.authSecret;
+  if (!token || !jwtKey) {
     res.status(401).json({ error: 'Not authenticated.' });
     return;
   }
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as { sub: number | string };
+    const decoded = jwt.verify(token, jwtKey) as { sub: number | string };
     const id = typeof decoded.sub === 'string' ? parseInt(decoded.sub, 10) : decoded.sub;
     const user = await getCustomerByIdSafe(id);
     if (!user) {
