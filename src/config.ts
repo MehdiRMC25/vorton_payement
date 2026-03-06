@@ -25,4 +25,13 @@ export const config = {
     name: process.env.BUSINESS_NAME ?? 'Business',
     supportEmail: process.env.SUPPORT_EMAIL ?? '',
   },
+  // PostgreSQL (optional; used for customers/auth when set)
+  database: {
+    url: process.env.DATABASE_URL ?? '',
+    host: process.env.PGHOST ?? 'localhost',
+    port: parseInt(process.env.PGPORT ?? '5432', 10),
+    user: process.env.PGUSER ?? 'postgres',
+    password: process.env.PGPASSWORD ?? '',
+    database: process.env.PGDATABASE ?? 'Vorton',
+  },
 } as const;
