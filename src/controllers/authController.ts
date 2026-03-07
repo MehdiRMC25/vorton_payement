@@ -39,6 +39,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
     const firstName = pickString(body, ['first_name', 'firstName']);
     const lastName = pickString(body, ['last_name', 'lastName']);
     const phone = normalizePhone(pickString(body, ['phone', 'phoneNumber', 'mobile', 'mobileNumber', 'mobile_number']));
+    const secondPhone = normalizePhone(pickString(body, ['second_phone', 'secondPhone', 'second_mobile', 'mobile_secondary']));
     const email = pickString(body, ['email']);
     const password = pickString(body, ['password']);
     const confirmPassword = pickString(body, ['confirm_password', 'confirmPassword', 'passwordConfirmation', 'password_confirmation']) ?? password;
@@ -98,6 +99,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
       last_name,
       email,
       phone,
+      second_phone: secondPhone ?? null,
       password_hash,
       password_salt,
       membership_number,

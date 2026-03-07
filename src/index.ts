@@ -26,6 +26,20 @@ app.use(config.apiPrefix + '/webhooks', webhookRouter);
 app.use(config.apiPrefix + '/auth', authRouter);
 app.post('/auth/signup', authController.signup);
 app.post('/auth/login', authController.login);
+app.get('/auth/signup', (_req, res) => {
+  res.status(200).json({
+    message: 'This is the signup API. Use POST with JSON body from your frontend. The signup form page is on your app (e.g. yoursite.com/signup).',
+    method: 'POST',
+    url: '/auth/signup',
+  });
+});
+app.get('/auth/login', (_req, res) => {
+  res.status(200).json({
+    message: 'This is the login API. Use POST with JSON body from your frontend. The login form page is on your app (e.g. yoursite.com/login).',
+    method: 'POST',
+    url: '/auth/login',
+  });
+});
 
 app.get('/', (_req, res) => {
   res.json({
