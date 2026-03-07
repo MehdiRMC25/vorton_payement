@@ -52,6 +52,17 @@ app.get('/', (_req, res) => {
 });
 
 async function start(): Promise<void> {
+  if (config.database.url) {
+    try {
+      const u = new URL(config.database.url);
+      console.log('Database: using DATABASE_URL (host: ' + u.hostname + ')');
+    } catch {
+      console.log('Database: using DATABASE_URL (url set)');
+    }
+  } else {
+    console.log('Database: using PGHOST (host: ' + config.database.host + ':' + config.database.port + ')');
+  }
+
   if (config.authSecret) {
     const { ExpressAuth, getSession } = await import('@auth/express');
     const GitHub = (await import('@auth/express/providers/github')).default;
