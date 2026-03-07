@@ -7,6 +7,7 @@ import {
   getCustomerByEmailOrPhone,
   getCustomerByIdSafe,
 } from '../services/customerService';
+import { assignSilverToNewCustomer } from '../services/membershipService';
 
 const SALT_ROUNDS = 10;
 
@@ -109,6 +110,8 @@ export async function signup(req: Request, res: Response): Promise<void> {
       postcode,
       country,
     });
+
+    await assignSilverToNewCustomer(row.id);
 
     const user = await getCustomerByIdSafe(row.id);
     const jwtKey = config.jwtSecret || config.authSecret;
