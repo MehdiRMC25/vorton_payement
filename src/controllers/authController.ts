@@ -143,7 +143,14 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const match = await bcrypt.compare(password, customer.password_hash);
+    let match = false;
+    try {
+      match = customer.password_hash
+        ? await bcrypt.compare(password, customer.password_hash)
+        : false;
+    } catch {
+      match = false;
+    }
     if (!match) {
       res.status(401).json({ error: 'Such account does not exist or login or password are not correct.' });
       return;
