@@ -59,9 +59,12 @@ app.get('/', (_req, res) => {
 
 async function start(): Promise<void> {
   try {
-    await syncStaffAccounts();
+    const result = await syncStaffAccounts();
+    if (result.synced === 0 && result.errors.length === 0) {
+      console.log('[Staff] No staff file found at', config.staffAccountsFile, '— set STAFF_ACCOUNTS_FILE or add config/staff-accounts.json and restart.');
+    }
   } catch (e) {
-    console.warn('Staff accounts sync skipped or failed:', e);
+    console.warn('[Staff] Sync failed (staff login may not work):', e);
   }
 
   if (!config.jwtSecret && !config.authSecret) {

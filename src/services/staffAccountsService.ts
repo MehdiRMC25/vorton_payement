@@ -24,7 +24,7 @@ export async function syncStaffAccounts(): Promise<{ synced: number; errors: str
   let synced = 0;
 
   if (!fs.existsSync(pathToRead)) {
-    console.warn('Staff accounts file not found (optional):', pathToRead);
+    console.warn('[Staff] File not found — staff login will not work until this file exists and server is restarted:', pathToRead);
     return { synced: 0, errors: [] };
   }
 
@@ -89,10 +89,11 @@ export async function syncStaffAccounts(): Promise<{ synced: number; errors: str
   }
 
   if (synced > 0) {
-    console.log('Staff accounts synced:', synced, 'from', pathToRead);
-  }
-  if (errors.length > 0) {
-    console.warn('Staff accounts sync errors:', errors);
+    console.log('[Staff] Synced', synced, 'account(s) from', pathToRead);
+  } else if (entries.length === 0) {
+    console.log('[Staff] File is empty, no accounts synced:', pathToRead);
+  } else if (errors.length > 0) {
+    console.warn('[Staff] Sync had errors (no accounts created):', errors);
   }
   return { synced, errors };
 }
