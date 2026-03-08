@@ -7,7 +7,7 @@ import {
   getCustomerByEmailOrPhone,
   getCustomerByIdSafe,
 } from '../services/customerService';
-import { assignSilverToNewCustomer } from '../services/membershipService';
+import { assignSilverToNewCustomer, recalculateCustomerMembership, getCustomerMembership } from '../services/membershipService';
 
 const SALT_ROUNDS = 10;
 
@@ -202,7 +202,9 @@ export async function me(req: Request, res: Response): Promise<void> {
       res.status(401).json({ error: 'Not authenticated.' });
       return;
     }
-    res.json({ user });
+    await recalculateCustomerMembership(id);
+    const membership = await getCustomerMembership(id);
+    res.json({ user, membership });
   } catch {
     res.status(401).json({ error: 'Not authenticated.' });
   }
