@@ -12,10 +12,12 @@ import { assignSilverToNewCustomer, recalculateCustomerMembership, getCustomerMe
 
 const SALT_ROUNDS = 10;
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Format: local@domain.tld — domain must have a TLD of 2+ letters. No error when email is omitted (optional). */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
 
 function isValidEmail(email: string): boolean {
-  return EMAIL_REGEX.test(email) && email.length <= 150;
+  if (!email || email.length > 150) return false;
+  return EMAIL_REGEX.test(email.trim());
 }
 
 function isValidMobile(phone: string): boolean {
@@ -57,7 +59,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
     const lastName = pickString(body, ['last_name', 'lastName']);
     const phone = normalizePhone(pickString(body, ['phone', 'phoneNumber', 'mobile', 'mobileNumber', 'mobile_number']));
     const secondPhone = normalizePhone(pickString(body, ['second_phone', 'secondPhone', 'second_mobile', 'mobile_secondary']));
-    const email = pickString(body, ['email']);
+    const email = pickString(body, ['email', 'emailAddress', 'Email']);
     const password = pickString(body, ['password']);
     const confirmPassword = pickString(body, ['confirm_password', 'confirmPassword', 'passwordConfirmation', 'password_confirmation']) ?? password;
     const addressLine1 = pickString(body, ['address_line1', 'addressLine1']);
