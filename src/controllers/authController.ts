@@ -119,9 +119,13 @@ export async function signup(req: Request, res: Response): Promise<void> {
       ? jwt.sign({ sub: row.id }, jwtKey, { expiresIn: '7d' })
       : null;
 
+    if (!token) {
+      console.warn('Signup succeeded but no JWT: set JWT_SECRET or AUTH_SECRET in environment');
+    }
+
     res.status(201).json({
       user,
-      ...(token && { token }),
+      token,
     });
   } catch (err) {
     console.error('Signup error:', err);
@@ -167,9 +171,13 @@ export async function login(req: Request, res: Response): Promise<void> {
       ? jwt.sign({ sub: customer.id }, jwtKey, { expiresIn: '7d' })
       : null;
 
+    if (!token) {
+      console.warn('Login succeeded but no JWT: set JWT_SECRET or AUTH_SECRET in environment');
+    }
+
     res.json({
       user,
-      ...(token && { token }),
+      token,
     });
   } catch (err) {
     console.error('Login error:', err);

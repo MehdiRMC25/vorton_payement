@@ -52,6 +52,9 @@ app.get('/', (_req, res) => {
 });
 
 async function start(): Promise<void> {
+  if (!config.jwtSecret && !config.authSecret) {
+    console.warn('No JWT_SECRET or AUTH_SECRET set: login/signup will return token: null. Set one in Environment for tokens.');
+  }
   if (config.database.url) {
     try {
       const u = new URL(config.database.url);

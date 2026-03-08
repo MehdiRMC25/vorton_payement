@@ -6,7 +6,7 @@ export const config = {
   env: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
   apiPrefix: process.env.API_PREFIX ?? '/api/v1',
-  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,https://vorton.uk').split(',').map(s => s.trim()),
+  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://localhost:5174,https://vorton.uk').split(',').map(s => s.trim()),
   apiKey: process.env.API_KEY ?? '',
   jwtSecret: process.env.JWT_SECRET ?? '',
   authSecret: process.env.AUTH_SECRET ?? '',
