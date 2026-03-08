@@ -1,45 +1,45 @@
-# Staff login accounts (employees & managers)
+# Staff login accounts (Employee & Manager)
 
-**File to edit:** `config/staff-accounts.json` in this project (or the path set in `STAFF_ACCOUNTS_FILE` env).
+**File to edit:** `config/staff-accounts.json` (or the path in `STAFF_ACCOUNTS_FILE`).
 
-This file defines which logins can sign in at the **staff login page** (e.g. `http://localhost:5173/staff/login`) and with which role:
-
-- **employee** – can see all orders and update order status (processing / dispatched / delivered).
-- **manager** – can see all orders, update status, and view statistics.
-
-After you change this file, **restart the backend** so it syncs these accounts into the database. Staff then sign in with **email + password** using the same login API as customers (`POST /api/v1/auth/login`).
+Two roles only: **employee** (you can show as “Staff” in the UI) and **manager**. Each account is a different person with their own **first_name**, **last_name**, **email**, and **password**; all are stored in Postgres after sync. Restart the backend or run `npm run sync-staff` after editing the file.
 
 ## Format
-
-JSON array of objects:
 
 ```json
 [
   {
-    "email": "employee@example.com",
+    "first_name": "Gulnara",
+    "last_name": "Habisheva",
+    "email": "gulnara.habisheva@example.com",
     "password": "your-secret-password",
     "role": "employee"
   },
   {
-    "email": "manager@example.com",
-    "password": "another-secret",
+    "first_name": "Mehdi",
+    "last_name": "Taghiyev",
+    "email": "mehdi.taghiyev@example.com",
+    "password": "another-password",
     "role": "manager"
   }
 ]
 ```
 
-- **email** – used to sign in (required).
-- **password** – plain text here; the backend hashes it on sync (required).
-- **role** – must be `"employee"` or `"manager"`.
+- **first_name**, **last_name** – Optional; stored in Postgres and shown in the app. If omitted, sync uses "Staff" and the role.
+- **email** – Required; used to sign in.
+- **password** – Required; plain text here; the backend hashes it and stores in Postgres.
+- **role** – **`"employee"`** or **`"manager"`** only.
 
-To add or remove staff, edit this file and restart the backend.
+## Upload staff to Postgres (manual sync)
+
+If the file was not on the server at startup (e.g. SSL blocks sync from your machine), run from project root:
+
+```bash
+npm run sync-staff
+```
+
+Your `.env` must have `DATABASE_URL` (or PGHOST, etc.) pointing at the same Postgres as the backend.
 
 ## Custom path
 
-Set the environment variable:
-
-```bash
-STAFF_ACCOUNTS_FILE=/absolute/path/to/your-staff.json
-```
-
-Default path: `config/staff-accounts.json` (relative to the project root where the backend runs).
+Set `STAFF_ACCOUNTS_FILE` to the full path of your JSON file. Default: `config/staff-accounts.json` relative to the project root.

@@ -10,6 +10,8 @@ export interface StaffAccountEntry {
   email: string;
   password: string;
   role: 'employee' | 'manager';
+  first_name?: string;
+  last_name?: string;
 }
 
 function slugify(s: string): string {
@@ -50,6 +52,8 @@ export async function syncStaffAccounts(): Promise<{ synced: number; errors: str
     const email = typeof row?.email === 'string' ? row.email.trim() : '';
     const password = typeof row?.password === 'string' ? row.password : '';
     const role = row?.role === 'manager' ? 'manager' : 'employee';
+    const first_name = typeof row?.first_name === 'string' ? row.first_name.trim() : 'Staff';
+    const last_name = typeof row?.last_name === 'string' ? row.last_name.trim() : role;
 
     if (!email) {
       errors.push(`Entry ${i + 1}: email is required`);
@@ -69,8 +73,8 @@ export async function syncStaffAccounts(): Promise<{ synced: number; errors: str
 
       if (existing.rows[0]) {
         await pool.query(
-          'UPDATE customers SET password_hash = $1, role = $2 WHERE email = $3',
-          [password_hash, role, email]
+          'UPDATE customers SET password_hash = $1, role = $2, first_name = $3, last_name = $4 WHERE email = $5',
+          [password_hash, role, first_name, last_name, email]
         );
       } else {
         const phone = 'staff-' + slugify(email) + '-' + Date.now().toString(36);
@@ -79,7 +83,7 @@ export async function syncStaffAccounts(): Promise<{ synced: number; errors: str
           `INSERT INTO customers (
             first_name, last_name, email, phone, password_hash, password_salt, membership_number, role
           ) VALUES ($1, $2, $3, $4, $5, NULL, $6, $7)`,
-          ['Staff', role, email, phone, password_hash, membership_number, role]
+          [first_name, last_name, email, phone, password_hash, membership_number, role]
         );
       }
       synced++;

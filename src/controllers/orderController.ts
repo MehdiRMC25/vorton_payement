@@ -52,7 +52,7 @@ export async function getOrdersByCustomer(req: Request, res: Response): Promise<
       res.status(400).json({ error: 'Invalid customer id' });
       return;
     }
-    if (req.user && req.user.id !== customerId && !['employee', 'manager'].includes(req.user.role)) {
+    if (req.user && req.user.id !== customerId && !['employee', 'manager', 'staff'].includes(req.user.role)) {
       res.status(403).json({ error: 'You can only view your own orders' });
       return;
     }

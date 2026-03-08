@@ -1,10 +1,14 @@
 [
   {
+    "first_name": "Leyla",
+    "last_name": "Guliyeva",
     "email": "leyla.guliyeva@caspiantextile.com",
     "password": "employee123",
     "role": "employee"
   },
   {
+    "first_name": "Mehdi",
+    "last_name": "Taghiyev",
     "email": "mehdi.taghiyev@caspiantextile.com",
     "password": "manager123",
     "role": "manager"

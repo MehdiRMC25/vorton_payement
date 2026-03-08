@@ -23,7 +23,7 @@ Build an **Order Operations and Tracking** dashboard that connects to our existi
   Header: `Authorization: Bearer <token>`  
   Response: `{ "user": { id, role, ... } }`
 - **Send JWT on all order API calls:** `Authorization: Bearer <token>`
-- **Roles:** `customer` | `employee` | `manager` (from `user.role`).
+- **Roles:** `customer` | `employee` | `manager` (from `user.role`). You can show “Staff” in the UI for `employee`.
 
 ### Order API (all under `{API_BASE}/orders`)
 
@@ -82,19 +82,18 @@ Required: `customer_id`, `customer_name`, `mobile`, `total_price` (non-negative)
 ### Staff login page
 - **URL:** `http://localhost:5173/staff/login?returnTo=%2Fstaff` (or your frontend origin + `/staff/login?returnTo=%2Fstaff`).
 - Staff sign in with **email + password** using the same API: `POST {API_BASE}/auth/login` with body `{ "email": "...", "password": "..." }`.
-- Logins and passwords for employees and managers are defined in the **backend** file **`config/staff-accounts.json`** (see repo `config/STAFF_ACCOUNTS_README.md`). The backend syncs this file on startup; after changing it, restart the backend. No frontend changes needed for new staff—just use the same login form and rely on `user.role` in the response.
+- Accounts are in **`config/staff-accounts.json`**: **first_name**, **last_name**, **email**, **password**, **role** (`employee` or `manager`). Synced to Postgres on startup or via `npm run sync-staff`. Login response includes `user` (id, role, first_name, last_name, email, ...) and `token`.
 
 ### Access control and UIs (three distinct experiences)
 - **Customers** (role `customer`): Do **not** use the staff login page. They sign in on the main site and see **delivery and tracking** in their own account: “My orders” list, order detail, and tracking status. Use `GET /orders/customer/{user.id}`. They can only see their own orders.
-- **Employees** (role `employee`): Sign in at the **staff login** page. After login, show the **employee UI**: all orders list, order detail, and ability to update status (PROCESSING → DISPATCHED → DELIVERED). No statistics section. Real-time updates via Socket.io.
-- **Managers** (role `manager`): Sign in at the **staff login** page. After login, show the **manager UI**: same as employee plus **statistics/overview** (e.g. counts by status from `GET /orders/stats`). So there are **two separate staff UIs** (employee vs manager); each category sees only their own UI.
+- **Employee** (role `employee`): Sign in at the staff login page. Can list orders, view detail, update status. Show as “Staff” in the UI if you like. Use `user.first_name`, `user.last_name` for their name.
+- **Manager** (role `manager`): Same as employee plus access to `GET /orders/stats` (statistics).
 
 ### What to build
-1. **Staff login:** Page at `/staff/login?returnTo=%2Fstaff` that posts email + password to `POST {API_BASE}/auth/login`, stores JWT and `user` (including `user.role`), then redirects to `returnTo` (e.g. `/staff`). After login, redirect employees to the employee dashboard and managers to the manager dashboard (two different UIs).
+1. **Staff login:** Page at `/staff/login?returnTo=%2Fstaff` that posts email + password to `POST {API_BASE}/auth/login`, stores JWT and `user`, then redirects to `/staff`. Show staff dashboard when `user.role` is `employee` or `manager`; you can label employee as "Staff" in the UI.
 2. **Customer account:** In the main app (not staff), customers see “My orders” and delivery/tracking for their own orders only.
-3. **Employee UI:** One layout for `role === 'employee'`—orders list, filters, order detail, status update controls, real-time updates. No stats.
-4. **Manager UI:** One layout for `role === 'manager'`—same as employee plus stats/overview (e.g. counts by status). Two distinct UIs so each category sees their own.
-5. **Real-time:** Connect Socket.io; on `order_created` and `order_status_updated`, refresh or merge data so staff dashboards update without reload.
+3. **Employee / Manager UI:** Employee: orders list, order detail, status updates. Manager: same plus statistics. Use `user.first_name`, `user.last_name` for display (each person has their own name/email/password in Postgres). Real-time updates via Socket.io.
+4. **Real-time:** Connect Socket.io; on `order_created` and `order_status_updated`, refresh or merge data so the staff dashboard updates without reload.
 
 ### Environment
 - Frontend needs at least:

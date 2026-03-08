@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { getCustomerByIdSafe } from '../services/customerService';
 
-export type Role = 'customer' | 'employee' | 'manager';
+export type Role = 'customer' | 'employee' | 'manager' | 'staff';
 
 export interface AuthUser {
   id: number;
