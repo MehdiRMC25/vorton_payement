@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { parsePhoneNumberWithError } from 'libphonenumber-js';
 import { config } from '../config';
 import {
   createCustomer,
@@ -10,6 +11,21 @@ import {
 import { assignSilverToNewCustomer, recalculateCustomerMembership, getCustomerMembership } from '../services/membershipService';
 
 const SALT_ROUNDS = 10;
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email) && email.length <= 150;
+}
+
+function isValidMobile(phone: string): boolean {
+  try {
+    const parsed = parsePhoneNumberWithError(phone);
+    return parsed.isValid();
+  } catch {
+    return false;
+  }
+}
 
 function membershipNumber(): string {
   return 'VORTON-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -55,6 +71,14 @@ export async function signup(req: Request, res: Response): Promise<void> {
       res.status(400).json({ error: 'Mobile number is required.' });
       return;
     }
+    if (!isValidMobile(phone)) {
+      res.status(400).json({ error: 'Invalid mobile number' });
+      return;
+    }
+    if (email && !isValidEmail(email)) {
+      res.status(400).json({ error: 'Invalid email address' });
+      return;
+    }
     if (!password || password.length < 6) {
       res.status(400).json({ error: 'Password must be at least 6 characters.' });
       return;
@@ -78,15 +102,15 @@ export async function signup(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const existing = await getCustomerByEmailOrPhone(phone);
-    if (existing) {
-      res.status(409).json({ error: 'An account with this mobile number already exists.' });
+    const existingByPhone = await getCustomerByEmailOrPhone(phone);
+    if (existingByPhone) {
+      res.status(409).json({ error: 'Account already exists. Please sign in.' });
       return;
     }
     if (email) {
-      const byEmail = await getCustomerByEmailOrPhone(email);
-      if (byEmail) {
-        res.status(409).json({ error: 'An account with this email already exists.' });
+      const existingByEmail = await getCustomerByEmailOrPhone(email);
+      if (existingByEmail) {
+        res.status(409).json({ error: 'Account already exists. Please sign in.' });
         return;
       }
     }
@@ -145,10 +169,21 @@ export async function login(req: Request, res: Response): Promise<void> {
       res.status(400).json({ error: 'Email or mobile number and password are required.' });
       return;
     }
+    if (loginId.includes('@')) {
+      if (!isValidEmail(loginId)) {
+        res.status(400).json({ error: 'Invalid email address' });
+        return;
+      }
+    } else {
+      if (!isValidMobile(loginId)) {
+        res.status(400).json({ error: 'Invalid mobile number' });
+        return;
+      }
+    }
 
     const customer = await getCustomerByEmailOrPhone(loginId);
     if (!customer) {
-      res.status(401).json({ error: 'Such account does not exist or login or password are not correct.' });
+      res.status(401).json({ error: 'Account not found' });
       return;
     }
 
@@ -161,7 +196,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       match = false;
     }
     if (!match) {
-      res.status(401).json({ error: 'Such account does not exist or login or password are not correct.' });
+      res.status(401).json({ error: 'Invalid password' });
       return;
     }
 
