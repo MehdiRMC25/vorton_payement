@@ -149,6 +149,11 @@ Copy `.env.example` to `.env` and set:
 | `JWT_SECRET` | Optional; for JWT auth later |
 | `BANK_*` | Filled from bank docs (see above) |
 | `BUSINESS_NAME`, `SUPPORT_EMAIL` | For receipts/support |
+| `STAFF_ACCOUNTS_FILE` | Optional; path to staff logins JSON (default: `config/staff-accounts.json`) |
+
+### Staff logins (orders dashboard)
+
+Employee and manager accounts are defined in **`config/staff-accounts.json`**. Edit that file to add or change logins and passwords, then restart the backend so it syncs them into the database. See **`config/STAFF_ACCOUNTS_README.md`** for format and details.
 
 ---
 

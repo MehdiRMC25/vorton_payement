@@ -1,4 +1,6 @@
+import http from 'http';
 import express from 'express';
+import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -7,6 +9,9 @@ import { paymentRouter } from './routes/payments';
 import { webhookRouter } from './routes/webhooks';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
+import { ordersRouter } from './routes/orders';
+import { setIO } from './socket';
+import { syncStaffAccounts } from './services/staffAccountsService';
 import * as authController from './controllers/authController';
 
 const app = express();
@@ -24,6 +29,7 @@ app.use(config.apiPrefix + '/health', healthRouter);
 app.use(config.apiPrefix + '/payments', paymentRouter);
 app.use(config.apiPrefix + '/webhooks', webhookRouter);
 app.use(config.apiPrefix + '/auth', authRouter);
+app.use(config.apiPrefix + '/orders', ordersRouter);
 app.post('/auth/signup', authController.signup);
 app.post('/auth/login', authController.login);
 app.get('/auth/signup', (_req, res) => {
@@ -52,6 +58,12 @@ app.get('/', (_req, res) => {
 });
 
 async function start(): Promise<void> {
+  try {
+    await syncStaffAccounts();
+  } catch (e) {
+    console.warn('Staff accounts sync skipped or failed:', e);
+  }
+
   if (!config.jwtSecret && !config.authSecret) {
     console.warn('No JWT_SECRET or AUTH_SECRET set: login/signup will return token: null. Set one in Environment for tokens.');
   }
@@ -87,9 +99,16 @@ async function start(): Promise<void> {
     console.log('Auth.js mounted at /auth and ' + config.apiPrefix + '/auth/session');
   }
 
-  app.listen(config.port, () => {
+  const server = http.createServer(app);
+  const io = new SocketIOServer(server, {
+    cors: { origin: config.corsOrigins.length > 0 ? config.corsOrigins : true, credentials: true },
+  });
+  setIO(io);
+
+  server.listen(config.port, () => {
     console.log(`Payment backend running on port ${config.port}`);
     console.log(`API base: ${config.apiPrefix}`);
+    console.log('Socket.io attached for real-time order updates (order_created, order_status_updated)');
   });
 }
 

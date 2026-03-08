@@ -1,3 +1,4 @@
+import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -10,6 +11,8 @@ export const config = {
   apiKey: process.env.API_KEY ?? '',
   jwtSecret: process.env.JWT_SECRET ?? '',
   authSecret: process.env.AUTH_SECRET ?? '',
+  /** Staff logins: edit this file (or set STAFF_ACCOUNTS_FILE) and restart the backend to apply. */
+  staffAccountsFile: process.env.STAFF_ACCOUNTS_FILE ?? path.join(process.cwd(), 'config', 'staff-accounts.json'),
   authGitHub: {
     clientId: process.env.AUTH_GITHUB_ID ?? '',
     clientSecret: process.env.AUTH_GITHUB_SECRET ?? '',

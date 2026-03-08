@@ -61,11 +61,12 @@ export async function getCustomerByEmailOrPhone(identifier: string) {
   return result.rows[0];
 }
 
-/** Use for API responses. Excludes password_hash and password_salt. */
+/** Use for API responses. Excludes password_hash and password_salt. Includes role for access control. */
 export async function getCustomerByIdSafe(id: number) {
   const result = await pool.query(
     `SELECT id, first_name, last_name, email, phone, second_phone, membership_number,
-            address_line1, address_line2, city, postcode, country, created_at
+            address_line1, address_line2, city, postcode, country, created_at,
+            COALESCE(role, 'customer') AS role
      FROM customers WHERE id = $1`,
     [id]
   );
