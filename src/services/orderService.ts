@@ -3,11 +3,14 @@ import { pool } from '../db';
 const ALLOWED_STATUSES = ['PROCESSING', 'DISPATCHED', 'DELIVERED'] as const;
 export type OrderStatus = 'NEW' | typeof ALLOWED_STATUSES[number];
 
+/** Item shape for Delivery/Order Tracking; frontend expects name, quantity, price, and optionally sku_color, size, product_id. */
 export interface OrderItem {
   product_id?: string;
   name: string;
   quantity: number;
   price: number;
+  sku_color?: string;
+  size?: string;
   [key: string]: unknown;
 }
 
