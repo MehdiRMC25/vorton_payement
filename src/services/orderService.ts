@@ -114,22 +114,32 @@ export function isAllowedStatus(status: string): status is typeof ALLOWED_STATUS
   return ALLOWED_STATUSES.includes(status as typeof ALLOWED_STATUSES[number]);
 }
 
+function toStr(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
 function formatOrderRow(row: Record<string, unknown>): Record<string, unknown> {
+  const orderDate = row.order_date;
+  const createdAt = row.created_at;
+  const updatedAt = row.updated_at;
   return {
-    id: row.id,
-    order_number: row.order_number,
-    customer_id: row.customer_id,
-    customer_name: row.customer_name,
-    mobile: row.mobile,
-    membership_level: row.membership_level,
-    address: row.address,
-    items: row.items,
-    total_price: Number(row.total_price),
-    order_date: row.order_date,
-    delivery_due_date: row.delivery_due_date,
-    status: row.status,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    id: toStr(row.id),
+    order_number: toStr(row.order_number),
+    customer_id: row.customer_id != null ? Number(row.customer_id) : null,
+    customer_name: toStr(row.customer_name),
+    mobile: toStr(row.mobile),
+    membership_level: toStr(row.membership_level) || 'none',
+    address: row.address != null && row.address !== '' ? toStr(row.address) : null,
+    items: Array.isArray(row.items) ? row.items : [],
+    total_price: Number(row.total_price) || 0,
+    order_date: orderDate instanceof Date ? orderDate.toISOString() : toStr(orderDate),
+    delivery_due_date: row.delivery_due_date != null && row.delivery_due_date !== '' ? toStr(row.delivery_due_date) : null,
+    status: toStr(row.status) || 'NEW',
+    created_at: createdAt instanceof Date ? createdAt.toISOString() : toStr(createdAt),
+    updated_at: updatedAt instanceof Date ? updatedAt.toISOString() : toStr(updatedAt),
   };
 }
 
