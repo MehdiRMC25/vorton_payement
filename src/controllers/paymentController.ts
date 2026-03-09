@@ -35,7 +35,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
     try {
       const p = updated.orderPayload;
       const result = await orderService.createOrder({
-        customer_id: p.customer_id,
+        customer_id: typeof p.customer_id === 'number' ? p.customer_id : undefined,
         customer_name: p.customer_name,
         mobile: p.mobile,
         membership_level: p.membership_level ?? 'none',

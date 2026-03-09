@@ -10,7 +10,7 @@ function generateId(): string {
 
 /** Optional: when payment confirms as FullyPaid, backend creates this order so it appears on Delivery and Order Track. */
 export interface PendingOrderPayload {
-  customer_id: number;
+  customer_id?: number;
   customer_name: string;
   mobile: string;
   membership_level?: string;

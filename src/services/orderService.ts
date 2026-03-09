@@ -15,7 +15,7 @@ export interface OrderItem {
 }
 
 export interface CreateOrderInput {
-  customer_id: number;
+  customer_id?: number | null;
   customer_name: string;
   mobile: string;
   membership_level: string;
@@ -39,7 +39,7 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
     RETURNING id, order_number`,
     [
       order_number,
-      input.customer_id,
+      input.customer_id ?? null,
       input.customer_name,
       input.mobile,
       input.membership_level || 'none',
