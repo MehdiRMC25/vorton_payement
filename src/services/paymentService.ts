@@ -8,6 +8,18 @@ function generateId(): string {
   return 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2, 11);
 }
 
+/** Optional: when payment confirms as FullyPaid, backend creates this order so it appears on Delivery and Order Track. */
+export interface PendingOrderPayload {
+  customer_id: number;
+  customer_name: string;
+  mobile: string;
+  membership_level?: string;
+  address?: string | null;
+  items: Array<{ name: string; quantity: number; price: number; product_id?: string; sku_color?: string; size?: string; [key: string]: unknown }>;
+  total_price: number;
+  delivery_due_date?: string | null;
+}
+
 export interface CreatePaymentInput {
   amount: number;
   currency: string;
@@ -19,6 +31,8 @@ export interface CreatePaymentInput {
   cancelUrl?: string;
   language?: string;
   metadata?: Record<string, string>;
+  /** If provided, when payment confirms as FullyPaid the backend will create this order (POST /orders) so it appears on Delivery and Order Track. */
+  order?: PendingOrderPayload;
 }
 
 export interface PaymentIntent {
@@ -34,6 +48,8 @@ export interface PaymentIntent {
   redirectUrl?: string;
   paymentUrl?: string;
   createdAt: string;
+  /** Stored from create; used to create order when payment confirms as succeeded. */
+  orderPayload?: PendingOrderPayload;
 }
 
 const payments = new Map<string, PaymentIntent>();
@@ -69,6 +85,7 @@ export async function createPaymentIntent(input: CreatePaymentInput): Promise<Pa
       redirectUrl: paymentUrl,
       paymentUrl,
       createdAt: new Date().toISOString(),
+      orderPayload: input.order ?? undefined,
     };
     payments.set(paymentId, intent);
     if (order.id) byBankOrderId.set(order.id, paymentId);
@@ -85,6 +102,7 @@ export async function createPaymentIntent(input: CreatePaymentInput): Promise<Pa
     reference: input.reference,
     clientSecret: 'demo_secret_' + generateId(),
     createdAt: new Date().toISOString(),
+    orderPayload: input.order ?? undefined,
   };
   payments.set(paymentId, intent);
   return intent;
