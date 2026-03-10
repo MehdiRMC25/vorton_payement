@@ -74,12 +74,19 @@ export async function getOrderById(id: string): Promise<Record<string, unknown> 
     [id]
   );
   if (!result.rows[0]) return null;
-  const statusHistory = await pool.query(
-    `SELECT status, created_at FROM order_status_history WHERE order_id = $1 ORDER BY created_at ASC`,
-    [id]
-  );
   const order = formatOrderRow(result.rows[0]);
-  order.status_history = statusHistory.rows;
+  try {
+    const statusHistory = await pool.query(
+      `SELECT status, created_at FROM order_status_history WHERE order_id = $1 ORDER BY created_at ASC`,
+      [id]
+    );
+    order.status_history = (statusHistory.rows || []).map((row: Record<string, unknown>) => ({
+      status: toStr(row.status),
+      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : toStr(row.created_at),
+    }));
+  } catch {
+    order.status_history = [];
+  }
   return order;
 }
 
