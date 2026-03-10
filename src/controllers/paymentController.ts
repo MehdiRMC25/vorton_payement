@@ -29,6 +29,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
     payment = await getPaymentByBankOrderIdFromDb(bankOrderId);
   }
   if (!payment) {
+    console.warn('[Payment] Payment not found for bank order', bankOrderId, '— run sql/payment-intents.sql if backend restarts between checkout and confirm');
     res.status(404).json({ error: 'Payment not found for this bank order' });
     return;
   }

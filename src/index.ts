@@ -81,6 +81,17 @@ async function start(): Promise<void> {
     console.log('Database: using PGHOST (host: ' + config.database.host + ':' + config.database.port + ')');
   }
 
+  // Check payment_intents table exists (needed for order creation after server restarts)
+  if (config.database.url || config.database.host) {
+    try {
+      const { pool } = await import('./db');
+      await pool.query('SELECT 1 FROM payment_intents LIMIT 1');
+      console.log('[Payment] payment_intents table OK — orders will be created after restarts');
+    } catch (e) {
+      console.warn('[Payment] Run sql/payment-intents.sql on your database so new orders from payments are created after server restarts.');
+    }
+  }
+
   if (config.authSecret) {
     const { ExpressAuth, getSession } = await import('@auth/express');
     const GitHub = (await import('@auth/express/providers/github')).default;
