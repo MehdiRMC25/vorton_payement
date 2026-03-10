@@ -239,8 +239,13 @@ export async function me(req: Request, res: Response): Promise<void> {
       res.status(401).json({ error: 'Not authenticated.' });
       return;
     }
-    await recalculateCustomerMembership(id);
-    const membership = await getCustomerMembership(id);
+    let membership = null;
+    try {
+      await recalculateCustomerMembership(id);
+      membership = await getCustomerMembership(id);
+    } catch {
+      // Membership tables may not exist; return user without membership
+    }
     res.json({ user, membership });
   } catch {
     res.status(401).json({ error: 'Not authenticated.' });
