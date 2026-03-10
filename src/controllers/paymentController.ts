@@ -3,7 +3,8 @@ import {
   createPaymentIntent,
   getPaymentStatus,
   getPaymentByBankOrderId,
-  confirmPaymentByBankOrder,
+  getPaymentByBankOrderIdFromDb,
+  confirmAndPersistPaymentStatus,
 } from '../services/paymentService';
 import { getTransactionDetails } from '../services/kapitalService';
 import * as orderService from '../services/orderService';
@@ -22,7 +23,11 @@ export async function create(req: Request, res: Response): Promise<void> {
 export async function confirm(req: Request, res: Response): Promise<void> {
   const bankOrderId = String(req.query.ID);
   const callbackStatus = String(req.query.STATUS);
-  const payment = getPaymentByBankOrderId(bankOrderId);
+  // Check memory first, then DB (survives server restarts, e.g. Render cold start)
+  let payment = getPaymentByBankOrderId(bankOrderId);
+  if (!payment) {
+    payment = await getPaymentByBankOrderIdFromDb(bankOrderId);
+  }
   if (!payment) {
     res.status(404).json({ error: 'Payment not found for this bank order' });
     return;
@@ -30,7 +35,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
   // Do not trust callback STATUS alone — verify with Transaction Details when available.
   const verified = await getTransactionDetails(bankOrderId);
   const statusToUse = verified?.status ?? callbackStatus;
-  const updated = confirmPaymentByBankOrder(bankOrderId, statusToUse);
+  const updated = await confirmAndPersistPaymentStatus(payment, statusToUse);
   if (updated?.status === 'succeeded' && updated?.orderPayload) {
     try {
       const p = updated.orderPayload;

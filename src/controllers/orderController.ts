@@ -6,6 +6,7 @@ import { emitOrderCreated, emitOrderStatusUpdated } from '../socket';
 export async function listOrders(_req: Request, res: Response): Promise<void> {
   try {
     const orders = await orderService.getAllOrders();
+    res.set('Cache-Control', 'no-store');
     res.json({ orders });
   } catch (err) {
     console.error('List orders error:', err);
@@ -17,6 +18,7 @@ export async function listOrders(_req: Request, res: Response): Promise<void> {
 export async function orderStats(_req: Request, res: Response): Promise<void> {
   try {
     const stats = await orderService.getOrderStats();
+    res.set('Cache-Control', 'no-store');
     res.json({ stats });
   } catch (err) {
     console.error('Order stats error:', err);

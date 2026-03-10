@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { createOrder, buildRedirectUrl } from './kapitalService';
+import { pool } from '../db';
 
 function generateId(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -89,6 +90,7 @@ export async function createPaymentIntent(input: CreatePaymentInput): Promise<Pa
     };
     payments.set(paymentId, intent);
     if (order.id) byBankOrderId.set(order.id, paymentId);
+    persistPaymentIntent(intent).catch((e) => console.warn('[Payment] Could not persist payment:', e));
     return intent;
   }
 
@@ -110,6 +112,55 @@ export async function createPaymentIntent(input: CreatePaymentInput): Promise<Pa
 
 export async function getPaymentStatus(paymentId: string): Promise<PaymentIntent | null> {
   return payments.get(paymentId) ?? null;
+}
+
+/** Persist payment to DB so order creation survives server restarts (e.g. Render cold start). */
+async function persistPaymentIntent(intent: PaymentIntent): Promise<void> {
+  if (!intent.bankOrderId || !intent.orderPayload) return;
+  try {
+    await pool.query(
+      `INSERT INTO payment_intents (payment_id, bank_order_id, bank_order_secret, status, amount, currency, order_payload)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+       ON CONFLICT (bank_order_id) DO UPDATE SET order_payload = EXCLUDED.order_payload, status = EXCLUDED.status`,
+      [
+        intent.paymentId,
+        intent.bankOrderId,
+        intent.bankOrderSecret ?? null,
+        intent.status,
+        intent.amount,
+        intent.currency,
+        JSON.stringify(intent.orderPayload),
+      ]
+    );
+  } catch {
+    // Table may not exist; persistPaymentIntent is best-effort
+  }
+}
+
+/** Look up payment by bank order ID from DB (used when in-memory map was lost on restart). */
+export async function getPaymentByBankOrderIdFromDb(bankOrderId: string): Promise<PaymentIntent | null> {
+  try {
+    const result = await pool.query(
+      `SELECT payment_id, bank_order_id, bank_order_secret, status, amount, currency, order_payload, created_at
+       FROM payment_intents WHERE bank_order_id = $1 LIMIT 1`,
+      [bankOrderId]
+    );
+    const row = result.rows[0];
+    if (!row || !row.order_payload) return null;
+    const payload = row.order_payload as PendingOrderPayload;
+    return {
+      paymentId: String(row.payment_id),
+      bankOrderId: String(row.bank_order_id),
+      bankOrderSecret: row.bank_order_secret ? String(row.bank_order_secret) : undefined,
+      status: String(row.status) as PaymentIntent['status'],
+      amount: Number(row.amount) || 0,
+      currency: String(row.currency) || 'AZN',
+      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+      orderPayload: payload,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function getPaymentByBankOrderId(bankOrderId: string): PaymentIntent | null {
@@ -138,6 +189,32 @@ export function confirmPaymentByBankOrder(bankOrderId: string, kapitalStatus: st
   p.status = status;
   payments.set(paymentId, p);
   return p;
+}
+
+/** Update payment status (in memory and DB). Used when payment may have been loaded from DB after restart. */
+export async function confirmAndPersistPaymentStatus(
+  payment: PaymentIntent,
+  kapitalStatus: string
+): Promise<PaymentIntent> {
+  const status = KAPITAL_STATUS_MAP[kapitalStatus] ?? (kapitalStatus ? 'pending' : payment.status);
+  payment.status = status;
+  // Keep in-memory in sync if present
+  const paymentId = payment.bankOrderId ? byBankOrderId.get(payment.bankOrderId) : null;
+  if (paymentId) {
+    payments.set(paymentId, payment);
+  }
+  // Persist to DB so status is updated
+  if (payment.bankOrderId) {
+    try {
+      await pool.query(
+        `UPDATE payment_intents SET status = $1 WHERE bank_order_id = $2`,
+        [status, payment.bankOrderId]
+      );
+    } catch (e) {
+      console.warn('[Payment] Could not update payment status in DB:', e);
+    }
+  }
+  return payment;
 }
 
 export function updatePaymentStatus(paymentId: string, status: PaymentIntent['status']): void {
