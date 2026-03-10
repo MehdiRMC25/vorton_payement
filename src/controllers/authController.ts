@@ -228,6 +228,7 @@ export async function me(req: Request, res: Response): Promise<void> {
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
   const jwtKey = config.jwtSecret || config.authSecret;
   if (!token || !jwtKey) {
+    if (!jwtKey) console.warn('[Auth] JWT_SECRET/AUTH_SECRET not set — tokens cannot be verified');
     res.status(401).json({ error: 'Not authenticated.' });
     return;
   }
@@ -236,6 +237,7 @@ export async function me(req: Request, res: Response): Promise<void> {
     const id = typeof decoded.sub === 'string' ? parseInt(decoded.sub, 10) : decoded.sub;
     const user = await getCustomerByIdSafe(id);
     if (!user) {
+      console.warn('[Auth] User not found for id', id, '— token may reference deleted account');
       res.status(401).json({ error: 'Not authenticated.' });
       return;
     }
@@ -247,7 +249,15 @@ export async function me(req: Request, res: Response): Promise<void> {
       // Membership tables may not exist; return user without membership
     }
     res.json({ user, membership });
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('expired')) {
+      console.warn('[Auth] Token expired — user should sign in again');
+    } else if (msg.includes('secret') || msg.includes('signature')) {
+      console.warn('[Auth] Invalid token signature — JWT_SECRET may have changed');
+    } else {
+      console.warn('[Auth] Token verification failed:', msg);
+    }
     res.status(401).json({ error: 'Not authenticated.' });
   }
 }
