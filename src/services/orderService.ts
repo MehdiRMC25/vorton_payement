@@ -67,27 +67,32 @@ export async function getAllOrders(): Promise<Record<string, unknown>[]> {
 }
 
 export async function getOrderById(id: string): Promise<Record<string, unknown> | null> {
-  const result = await pool.query(
-    `SELECT id, order_number, customer_id, customer_name, mobile, membership_level,
-            address, items, total_price, order_date, delivery_due_date, status, created_at, updated_at
-     FROM orders WHERE id = $1`,
-    [id]
-  );
-  if (!result.rows[0]) return null;
-  const order = formatOrderRow(result.rows[0]);
   try {
-    const statusHistory = await pool.query(
-      `SELECT status, created_at FROM order_status_history WHERE order_id = $1 ORDER BY created_at ASC`,
+    const result = await pool.query(
+      `SELECT id, order_number, customer_id, customer_name, mobile, membership_level,
+              address, items, total_price, order_date, delivery_due_date, status, created_at, updated_at
+       FROM orders WHERE id = $1`,
       [id]
     );
-    order.status_history = (statusHistory.rows || []).map((row: Record<string, unknown>) => ({
-      status: toStr(row.status),
-      created_at: row.created_at instanceof Date ? row.created_at.toISOString() : toStr(row.created_at),
-    }));
-  } catch {
-    order.status_history = [];
+    if (!result.rows[0]) return null;
+    const order = formatOrderRow(result.rows[0]);
+    try {
+      const statusHistory = await pool.query(
+        `SELECT status, created_at FROM order_status_history WHERE order_id = $1 ORDER BY created_at ASC`,
+        [id]
+      );
+      order.status_history = (statusHistory.rows || []).map((row: Record<string, unknown>) => ({
+        status: toStr(row.status),
+        created_at: row.created_at instanceof Date ? row.created_at.toISOString() : toStr(row.created_at),
+      }));
+    } catch {
+      order.status_history = [];
+    }
+    return order;
+  } catch (err) {
+    console.error('getOrderById error:', err);
+    return null;
   }
-  return order;
 }
 
 export async function getOrdersByCustomerId(customerId: number): Promise<Record<string, unknown>[]> {
