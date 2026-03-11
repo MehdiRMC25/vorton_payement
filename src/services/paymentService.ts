@@ -116,7 +116,14 @@ export async function getPaymentStatus(paymentId: string): Promise<PaymentIntent
 
 /** Persist payment to DB so order creation survives server restarts (e.g. Render cold start). */
 async function persistPaymentIntent(intent: PaymentIntent): Promise<void> {
-  if (!intent.bankOrderId || !intent.orderPayload) return;
+  if (!intent.bankOrderId) {
+    console.warn('[Payment] Skip persist: no bankOrderId (demo mode or bank not configured)');
+    return;
+  }
+  if (!intent.orderPayload) {
+    console.warn('[Payment] Skip persist: no orderPayload — frontend must send order in create request');
+    return;
+  }
   try {
     await pool.query(
       `INSERT INTO payment_intents (payment_id, bank_order_id, bank_order_secret, status, amount, currency, order_payload)
@@ -132,8 +139,9 @@ async function persistPaymentIntent(intent: PaymentIntent): Promise<void> {
         JSON.stringify(intent.orderPayload),
       ]
     );
-  } catch {
-    // Table may not exist; persistPaymentIntent is best-effort
+    console.log('[Payment] Persisted payment', intent.bankOrderId);
+  } catch (e) {
+    console.error('[Payment] Persist failed:', e instanceof Error ? e.message : String(e));
   }
 }
 

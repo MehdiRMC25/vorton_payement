@@ -92,6 +92,14 @@ async function start(): Promise<void> {
     }
   }
 
+  // Log Kapital Bank config (payments only persist when real bank is used)
+  const hasBank = Boolean(config.bank.gatewayUrl && config.bank.username && config.bank.password);
+  if (hasBank) {
+    console.log('[Payment] Kapital Bank configured — payments will persist to payment_intents');
+  } else {
+    console.warn('[Payment] Kapital Bank not configured (KAPITAL_BASE_URL, USERNAME, PASSWORD) — payments stay in memory only, orders lost on restart');
+  }
+
   if (config.authSecret) {
     const { ExpressAuth, getSession } = await import('@auth/express');
     const GitHub = (await import('@auth/express/providers/github')).default;
