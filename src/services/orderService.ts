@@ -1,4 +1,5 @@
 import { pool } from '../db';
+import { getCustomerMembership } from './membershipService';
 
 const ALLOWED_STATUSES = ['PROCESSING', 'DISPATCHED', 'DELIVERED'] as const;
 export type OrderStatus = 'NEW' | typeof ALLOWED_STATUSES[number];
@@ -30,6 +31,17 @@ function generateOrderNumber(): string {
 }
 
 export async function createOrder(input: CreateOrderInput): Promise<{ id: string; order_number: string }> {
+  let membership_level = input.membership_level || 'none';
+  if (input.customer_id != null) {
+    try {
+      const membership = await getCustomerMembership(input.customer_id);
+      if (membership?.name) {
+        membership_level = membership.name.toLowerCase();
+      }
+    } catch (err) {
+      console.warn('[Order] Could not fetch membership for customer', input.customer_id, err);
+    }
+  }
   const order_number = generateOrderNumber();
   const result = await pool.query(
     `INSERT INTO orders (
@@ -42,7 +54,7 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
       input.customer_id ?? null,
       input.customer_name,
       input.mobile,
-      input.membership_level || 'none',
+      membership_level,
       input.address ?? null,
       JSON.stringify(input.items || []),
       input.total_price,
