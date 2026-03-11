@@ -12,10 +12,15 @@ import { emitOrderCreated } from '../socket';
 
 export async function create(req: Request, res: Response): Promise<void> {
   try {
+    const body = req.body as Record<string, unknown>;
+    const hasOrder = body && typeof body.order === 'object' && body.order !== null;
+    console.log('[Payment] Create request: hasOrder=', hasOrder);
     const result = await createPaymentIntent(req.body);
+    console.log('[Payment] Create succeeded: bankOrderId=', (result as { bankOrderId?: string }).bankOrderId);
     res.status(201).json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Payment creation failed';
+    console.error('[Payment] Create failed:', message);
     res.status(500).json({ error: message });
   }
 }
@@ -25,11 +30,15 @@ export async function confirm(req: Request, res: Response): Promise<void> {
   const callbackStatus = String(req.query.STATUS);
   // Check memory first, then DB (survives server restarts, e.g. Render cold start)
   let payment = getPaymentByBankOrderId(bankOrderId);
+  const fromDb = !payment;
   if (!payment) {
     payment = await getPaymentByBankOrderIdFromDb(bankOrderId);
   }
+  if (payment) {
+    console.log('[Payment] Confirm: found payment from', fromDb ? 'DB' : 'memory');
+  }
   if (!payment) {
-    console.warn('[Payment] Payment not found for bank order', bankOrderId, '— run sql/payment-intents.sql if backend restarts between checkout and confirm');
+    console.warn('[Payment] Payment not found for bank order', bankOrderId);
     res.status(404).json({ error: 'Payment not found for this bank order' });
     return;
   }
@@ -40,6 +49,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
   if (updated?.status === 'succeeded' && updated?.orderPayload) {
     try {
       const p = updated.orderPayload;
+      console.log('[Payment] Creating order for bank order', bankOrderId);
       const result = await orderService.createOrder({
         customer_id: typeof p.customer_id === 'number' ? p.customer_id : undefined,
         customer_name: p.customer_name,
@@ -52,9 +62,12 @@ export async function confirm(req: Request, res: Response): Promise<void> {
       });
       const order = await orderService.getOrderById(result.id);
       if (order) emitOrderCreated(order);
+      console.log('[Payment] Order created:', result.order_number);
     } catch (err) {
-      console.error('Create order on payment confirm:', err);
+      console.error('[Payment] Create order on confirm failed:', err);
     }
+  } else {
+    console.log('[Payment] Confirm skipped order creation: status=', updated?.status, 'hasOrderPayload=', !!updated?.orderPayload);
   }
   res.json(updated ?? payment);
 }
