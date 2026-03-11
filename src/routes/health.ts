@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db';
+import { config } from '../config';
 
 export const healthRouter = Router();
 
@@ -9,6 +10,31 @@ healthRouter.get('/', (_req, res) => {
     timestamp: new Date().toISOString(),
     service: 'payment-backend',
   });
+});
+
+/** Check DB, orders, payment_intents — use to verify payment flow. */
+healthRouter.get('/payments', async (_req, res) => {
+  try {
+    const dbResult = await pool.query('SELECT current_database() AS name');
+    const ordersResult = await pool.query('SELECT count(*)::int AS n FROM orders');
+    const intentsResult = await pool.query('SELECT count(*)::int AS n FROM payment_intents');
+    const hasBank = Boolean(
+      config.bank.gatewayUrl && config.bank.username && config.bank.password
+    );
+    res.json({
+      connected: true,
+      database: dbResult.rows[0]?.name ?? null,
+      ordersCount: ordersResult.rows[0]?.n ?? 0,
+      paymentIntentsCount: intentsResult.rows[0]?.n ?? 0,
+      kapitalConfigured: hasBank,
+    });
+  } catch (err) {
+    console.error('Health payments check failed:', err);
+    res.status(500).json({
+      connected: false,
+      error: err instanceof Error ? err.message : 'Database error',
+    });
+  }
 });
 
 /** Check which DB the backend uses and customer count. Use this to verify signups are in the right DB. */

@@ -64,7 +64,8 @@ export async function confirm(req: Request, res: Response): Promise<void> {
       if (order) emitOrderCreated(order);
       console.log('[Payment] Order created:', result.order_number);
     } catch (err) {
-      console.error('[Payment] Create order on confirm failed:', err);
+      const e = err as { message?: string; detail?: string; code?: string };
+      console.error('[Payment] Create order on confirm failed:', e?.message || err, e?.detail || '');
     }
   } else {
     console.log('[Payment] Confirm skipped order creation: status=', updated?.status, 'hasOrderPayload=', !!updated?.orderPayload);
