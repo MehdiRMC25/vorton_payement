@@ -8,6 +8,7 @@ import {
 } from '../services/paymentService';
 import { getTransactionDetails } from '../services/kapitalService';
 import * as orderService from '../services/orderService';
+import { sendOrderNotification } from '../services/emailService';
 import { emitOrderCreated } from '../socket';
 
 export async function create(req: Request, res: Response): Promise<void> {
@@ -61,7 +62,10 @@ export async function confirm(req: Request, res: Response): Promise<void> {
         delivery_due_date: p.delivery_due_date ?? null,
       });
       const order = await orderService.getOrderById(result.id);
-      if (order) emitOrderCreated(order);
+      if (order) {
+        emitOrderCreated(order);
+        void sendOrderNotification(order);
+      }
       console.log('[Payment] Order created:', result.order_number);
     } catch (err) {
       const e = err as { message?: string; detail?: string; code?: string };

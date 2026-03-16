@@ -10,6 +10,7 @@ import { webhookRouter } from './routes/webhooks';
 import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
 import { ordersRouter } from './routes/orders';
+import { productsRouter } from './routes/products';
 import { setIO } from './socket';
 import { syncStaffAccounts } from './services/staffAccountsService';
 import * as authController from './controllers/authController';
@@ -30,6 +31,7 @@ app.use(config.apiPrefix + '/payments', paymentRouter);
 app.use(config.apiPrefix + '/webhooks', webhookRouter);
 app.use(config.apiPrefix + '/auth', authRouter);
 app.use(config.apiPrefix + '/orders', ordersRouter);
+app.use('/api', productsRouter);
 app.post('/auth/signup', authController.signup);
 app.post('/auth/login', authController.login);
 app.get('/auth/signup', (_req, res) => {

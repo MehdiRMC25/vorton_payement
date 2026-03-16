@@ -30,6 +30,23 @@ export const config = {
     name: process.env.BUSINESS_NAME ?? 'Business',
     supportEmail: process.env.SUPPORT_EMAIL ?? '',
   },
+  // MongoDB (products catalog; vorton_app database)
+  mongodbUri: process.env.MONGODB_URI ?? '',
+  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
+    apiKey: process.env.CLOUDINARY_API_KEY ?? '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
+  },
+  // SMTP for order notifications (from bot@vorton.uk to orders@vorton.com)
+  email: {
+    host: process.env.EMAIL_HOST ?? '',
+    port: parseInt(process.env.EMAIL_PORT ?? '587', 10),
+    user: process.env.EMAIL_USER ?? process.env.EMAIL_FROM ?? '',
+    pass: process.env.EMAIL_PASS ?? '',
+    from: process.env.EMAIL_FROM ?? 'bot@vorton.uk',
+    to: process.env.EMAIL_TO ?? 'orders@vorton.com',
+  },
   // PostgreSQL (optional; used for customers/auth when set)
   database: {
     url: process.env.DATABASE_URL ?? '',

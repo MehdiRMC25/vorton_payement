@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as orderService from '../services/orderService';
+import { sendOrderNotification } from '../services/emailService';
 import { emitOrderCreated, emitOrderStatusUpdated } from '../socket';
 
 /** GET /orders - all orders (employee, manager) */
@@ -100,8 +101,10 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
     });
 
     const order = await orderService.getOrderById(result.id);
-    emitOrderCreated(order);
-
+    if (order) {
+      emitOrderCreated(order);
+      void sendOrderNotification(order);
+    }
     res.status(201).json(order);
   } catch (err) {
     console.error('Create order error:', err);
