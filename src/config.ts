@@ -7,7 +7,7 @@ export const config = {
   env: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
   apiPrefix: process.env.API_PREFIX ?? '/api/v1',
-  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://localhost:5174,https://vorton.uk').split(',').map(s => s.trim()),
+  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://localhost:5174,https://vorton.uk,https://www.vorton.uk').split(',').map(s => s.trim()),
   apiKey: process.env.API_KEY ?? '',
   jwtSecret: process.env.JWT_SECRET ?? '',
   authSecret: process.env.AUTH_SECRET ?? '',
@@ -20,6 +20,8 @@ export const config = {
   // Kapital Bank E-commerce API (Basic Auth)
   bank: {
     gatewayUrl: process.env.KAPITAL_BASE_URL ?? process.env.BANK_GATEWAY_URL ?? '',
+    /** Create order path; default /order. Override if Kapital docs specify different (e.g. /Order, /orders). */
+    orderPath: process.env.KAPITAL_ORDER_PATH ?? '/order',
     username: process.env.KAPITAL_USERNAME ?? process.env.BANK_USERNAME ?? '',
     password: process.env.KAPITAL_PASSWORD ?? process.env.BANK_PASSWORD ?? '',
     callbackUrl: process.env.CALLBACK_URL ?? '',

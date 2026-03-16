@@ -22,11 +22,18 @@ export interface KapitalOrderResponse {
 /**
  * Create a Purchase order (Order_SMS) with Kapital Bank E-commerce API.
  * Uses Basic Auth. Returns order id, HPP URL, and password for redirect.
+ *
+ * Per official docs (Ecommerce API Documentation Simple):
+ * - Prod base: https://e-commerce.kapitalbank.az/api
+ * - Test base: https://txpgtst.kapitalbank.az/api
+ * - Create order: POST /order (relative to base)
  */
 export async function createOrder(params: KapitalCreateOrderParams): Promise<KapitalOrderResponse> {
   const { bank } = config;
-  const baseUrl = bank.gatewayUrl.replace(/\/$/, '');
-  const url = `${baseUrl}/order/`;
+  // Normalize: base must end at /api, never include /order (avoids POST /order/order/ 404)
+  const baseUrl = bank.gatewayUrl.replace(/\/order\/?$/, '').replace(/\/$/, '');
+  const orderPath = (bank as { orderPath?: string }).orderPath?.replace(/^\//, '') || 'order';
+  const url = `${baseUrl}/${orderPath}`;
   const credentials = Buffer.from(`${bank.username}:${bank.password}`, 'utf8').toString('base64');
   const requestBody = {
     order: {
@@ -48,6 +55,7 @@ export async function createOrder(params: KapitalCreateOrderParams): Promise<Kap
   });
   if (!res.ok) {
     const text = await res.text();
+    console.error('[Kapital] POST failed', res.status, 'URL:', url, 'Response:', text.slice(0, 300));
     throw new Error(`Kapital Bank error (${res.status}): ${text}`);
   }
   const data = (await res.json()) as Record<string, unknown> & { order?: Record<string, unknown> };
