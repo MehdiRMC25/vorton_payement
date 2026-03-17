@@ -103,18 +103,18 @@ export async function getCloudinaryImageData(): Promise<CloudinaryImageData> {
 
 /**
  * Get version for a public_id (for cache-busting URLs). Returns undefined if not found.
+ * Uses only exact/lowercase match - never normalized, to avoid using another image's version (causes 404).
  */
 export function getVersionForPublicId(publicId: string, versionMap: Map<string, number>): number | undefined {
   if (!publicId || versionMap.size === 0) return undefined
   const v = versionMap.get(publicId) ?? versionMap.get(publicId.toLowerCase())
   if (v != null) return v
   const fileId = filenameToPublicId(publicId)
-  if (fileId) {
+  if (fileId && fileId !== publicId) {
     const v2 = versionMap.get(fileId) ?? versionMap.get(fileId.toLowerCase())
     if (v2 != null) return v2
   }
-  const normalized = toPublicIdNormalized(publicId)
-  return normalized ? (versionMap.get(normalized) ?? undefined) : undefined
+  return undefined
 }
 
 /**
