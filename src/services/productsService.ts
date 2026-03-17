@@ -1,6 +1,10 @@
 import { MongoClient, ObjectId } from 'mongodb'
 import { config } from '../config'
-import { getExistingImagePublicIds, publicIdExistsInSet } from './cloudinaryService'
+import {
+  getCloudinaryImageData,
+  getVersionForPublicId,
+  publicIdExistsInSet,
+} from './cloudinaryService'
 
 let mongoClient: MongoClient | null = null
 let productsCollection: import('mongodb').Collection | null = null
@@ -129,6 +133,23 @@ function passesImageFilter(product: Record<string, unknown>, primaryPublicId: st
   return publicIdExistsInSet(primaryPublicId, existingIds)
 }
 
+const CLOUDINARY_FOLDER = 'vorton-products'
+
+/** Build Cloudinary URL with version for cache-busting when image is replaced. */
+function buildCloudinaryImageUrl(
+  publicId: string,
+  versionMap: Map<string, number>
+): string {
+  const cloudName = config.cloudinaryCloudName
+  if (!cloudName || !publicId) return ''
+  const base = `https://res.cloudinary.com/${cloudName}/image/upload/`
+  const version = getVersionForPublicId(publicId, versionMap)
+  const path = version != null
+    ? `v${version}/${CLOUDINARY_FOLDER}/${encodeURIComponent(publicId)}`
+    : `${CLOUDINARY_FOLDER}/${encodeURIComponent(publicId)}`
+  return base + path
+}
+
 async function getCollection(): Promise<{ collection: import('mongodb').Collection; client: MongoClient }> {
   const uri = config.mongodbUri
   if (!uri) throw new Error('MONGODB_URI not set')
@@ -161,7 +182,7 @@ async function getCollection(): Promise<{ collection: import('mongodb').Collecti
   return { collection: productsCollection, client: mongoClient }
 }
 
-function normalize(doc: Record<string, unknown> | null): Record<string, unknown> | null {
+function normalize(doc: Record<string, unknown> | null, versionMap: Map<string, number>): Record<string, unknown> | null {
   if (!doc) return null
   const cloudBase = config.cloudinaryCloudName
     ? `https://res.cloudinary.com/${config.cloudinaryCloudName}/image/upload/vorton-products/`
@@ -172,29 +193,31 @@ function normalize(doc: Record<string, unknown> | null): Record<string, unknown>
     ? `${String(doc.sku).trim()}-${String(color).trim().replace(/\s+/g, '-')}`
     : '')
 
+  const buildUrl = (publicId: string) => buildCloudinaryImageUrl(publicId, versionMap) || cloudBase + encodeURIComponent(publicId)
+
   let image: string | null = (doc.imageUrl as string) || null
   if (!image && typeof doc.image === 'string' && (doc.image.startsWith('http://') || doc.image.startsWith('https://'))) {
     image = doc.image
   }
   if (!image && cloudBase && typeof doc.image === 'string' && doc.image.trim()) {
     const publicId = filenameToPublicId(doc.image)
-    if (publicId) image = cloudBase + encodeURIComponent(publicId)
+    if (publicId) image = buildUrl(publicId)
   }
   if (!image && cloudBase && Array.isArray(doc.images) && doc.images[0]) {
     const publicId = filenameToPublicId(String(doc.images[0]))
-    if (publicId) image = cloudBase + encodeURIComponent(publicId)
+    if (publicId) image = buildUrl(publicId)
   }
   if (!image && cloudBase && skuColor) {
     const publicId = toPublicIdNormalized(skuColor)
-    if (publicId) image = cloudBase + publicId
+    if (publicId) image = buildUrl(publicId)
   }
   if (!image && cloudBase && doc.sku) {
     const publicId = toPublicIdNormalized(String(doc.sku))
-    if (publicId) image = cloudBase + publicId
+    if (publicId) image = buildUrl(publicId)
   }
   if (!image && cloudBase) {
     const publicId = toPublicIdNormalized(skuColor || String(doc.sku ?? ''))
-    if (publicId) image = cloudBase + publicId
+    if (publicId) image = buildUrl(publicId)
   }
 
   const rawSizes = doc.sizes ?? doc.Sizes ?? doc.availableSizes ?? doc.available_sizes ?? doc['Available Sizes'] ?? doc.sizeOptions ?? doc.size ?? doc.Size ?? doc.size_options
@@ -233,7 +256,7 @@ function normalize(doc: Record<string, unknown> | null): Record<string, unknown>
         if (s.startsWith('http://') || s.startsWith('https://')) return s
         if (cloudBase) {
           const publicId = filenameToPublicId(s)
-          return publicId ? cloudBase + encodeURIComponent(publicId) : null
+          return publicId ? buildUrl(publicId) : null
         }
         return null
       })
@@ -280,7 +303,7 @@ export async function getAllProducts(): Promise<{ list: Record<string, unknown>[
   }
   try {
     const { collection: col } = await getCollection()
-    const existingIds = await getExistingImagePublicIds()
+    const { existingIds, versionMap } = await getCloudinaryImageData()
     const docs = await col.find(DISPLAY_ONLINE_QUERY, { projection: PROJECTION }).sort({ sku: 1, _id: 1 }).toArray()
     const products = docs
       .map((d) => {
@@ -288,7 +311,7 @@ export async function getAllProducts(): Promise<{ list: Record<string, unknown>[
         if (isStockOnly(doc)) return null
         const primaryPublicId = getPrimaryPublicIdForDoc(doc)
         if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
-        try { return normalize(doc) } catch (e) { console.warn('[products] normalize failed:', (e as Error).message); return null }
+        try { return normalize(doc, versionMap) } catch (e) { console.warn('[products] normalize failed:', (e as Error).message); return null }
       })
       .filter((p): p is Record<string, unknown> => !!p)
     serverCache.all = { data: products, ts: Date.now() }
@@ -320,10 +343,10 @@ export async function getProductById(id: string): Promise<Record<string, unknown
       ) as Record<string, unknown> | null
     }
     if (doc && isStockOnly(doc)) return null
-    const existingIds = await getExistingImagePublicIds()
+    const { existingIds, versionMap } = await getCloudinaryImageData()
     const primaryPublicId = doc ? getPrimaryPublicIdForDoc(doc) : null
     if (doc && !passesImageFilter(doc, primaryPublicId, existingIds)) return null
-    const product = normalize(doc)
+    const product = normalize(doc, versionMap)
     if (product && product.id) serverCache.byId[String(product.id)] = { data: product, ts: Date.now() }
     return product
   } catch (err) {
@@ -341,14 +364,14 @@ export async function getProductsByCategory(category: string): Promise<Record<st
     const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const re = new RegExp(`^${escaped}$`, 'i')
     const docs = await col.find({ $and: [{ $or: [{ category: re }, { gender: re }] }, DISPLAY_ONLINE_QUERY] }, { projection: PROJECTION }).sort({ sku: 1, _id: 1 }).toArray()
-    const existingIds = await getExistingImagePublicIds()
+    const { existingIds, versionMap } = await getCloudinaryImageData()
     const products = docs
       .map((d) => {
         const doc = d as Record<string, unknown>
         if (isStockOnly(doc)) return null
         const primaryPublicId = getPrimaryPublicIdForDoc(doc)
         if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
-        try { return normalize(doc) } catch (e) { return null }
+        try { return normalize(doc, versionMap) } catch (e) { return null }
       })
       .filter((p): p is Record<string, unknown> => !!p)
     serverCache.byCategory[c] = { data: products, ts: Date.now() }
@@ -382,14 +405,14 @@ export async function getVariantsByBaseSku(baseSku: string): Promise<Record<stri
       }, { projection: PROJECTION })
       .sort({ sku: 1, skuColor: 1 })
       .toArray()
-    const existingIds = await getExistingImagePublicIds()
+    const { existingIds, versionMap } = await getCloudinaryImageData()
     return docs
       .map((d) => {
         const doc = d as Record<string, unknown>
         if (isStockOnly(doc)) return null
         const primaryPublicId = getPrimaryPublicIdForDoc(doc)
         if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
-        try { return normalize(doc) } catch (e) { return null }
+        try { return normalize(doc, versionMap) } catch (e) { return null }
       })
       .filter((p): p is Record<string, unknown> => !!p)
   } catch (err) {
