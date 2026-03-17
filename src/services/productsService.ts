@@ -35,12 +35,37 @@ const PROJECTION = {
   Display: 1, display: 1,
 }
 
+/** Only products marked online; explicitly exclude stock_only in all common variations. */
+const STOCK_ONLY_VALUES = [
+  'stock_only', 'stock only', 'Stock_Only', 'Stock Only',
+  'stock-only', 'Stock-only', 'Stock-Only', 'STOCK_ONLY',
+  'StockOnly', 'stockonly',
+]
 const DISPLAY_ONLINE_QUERY = {
-  $or: [
-    { Display: 'online' },
-    { Display: 'Online' },
-    { display: 'online' },
+  $and: [
+    {
+      $or: [
+        { Display: 'online' },
+        { Display: 'Online' },
+        { display: 'online' },
+      ],
+    },
+    {
+      $and: [
+        { Display: { $nin: STOCK_ONLY_VALUES } },
+        { display: { $nin: STOCK_ONLY_VALUES } },
+      ],
+    },
   ],
+}
+
+/** Safety filter: exclude docs marked stock_only (catches any value not in MongoDB $nin). */
+function isStockOnly(doc: Record<string, unknown>): boolean {
+  const d = String(doc.Display ?? doc.display ?? '').trim().toLowerCase()
+  if (!d) return false
+  if (STOCK_ONLY_VALUES.some((v) => v.toLowerCase() === d)) return true
+  const normalized = d.replace(/[\s\-_]/g, '')
+  return normalized === 'stockonly'
 }
 
 function hasMongoUri(): boolean {
@@ -260,6 +285,7 @@ export async function getAllProducts(): Promise<{ list: Record<string, unknown>[
     const products = docs
       .map((d) => {
         const doc = d as Record<string, unknown>
+        if (isStockOnly(doc)) return null
         const primaryPublicId = getPrimaryPublicIdForDoc(doc)
         if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
         try { return normalize(doc) } catch (e) { console.warn('[products] normalize failed:', (e as Error).message); return null }
@@ -293,6 +319,7 @@ export async function getProductById(id: string): Promise<Record<string, unknown
         { projection: PROJECTION }
       ) as Record<string, unknown> | null
     }
+    if (doc && isStockOnly(doc)) return null
     const existingIds = await getExistingImagePublicIds()
     const primaryPublicId = doc ? getPrimaryPublicIdForDoc(doc) : null
     if (doc && !passesImageFilter(doc, primaryPublicId, existingIds)) return null
@@ -318,6 +345,7 @@ export async function getProductsByCategory(category: string): Promise<Record<st
     const products = docs
       .map((d) => {
         const doc = d as Record<string, unknown>
+        if (isStockOnly(doc)) return null
         const primaryPublicId = getPrimaryPublicIdForDoc(doc)
         if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
         try { return normalize(doc) } catch (e) { return null }
@@ -358,6 +386,7 @@ export async function getVariantsByBaseSku(baseSku: string): Promise<Record<stri
     return docs
       .map((d) => {
         const doc = d as Record<string, unknown>
+        if (isStockOnly(doc)) return null
         const primaryPublicId = getPrimaryPublicIdForDoc(doc)
         if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
         try { return normalize(doc) } catch (e) { return null }
