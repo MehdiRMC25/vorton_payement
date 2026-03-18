@@ -13,19 +13,22 @@ export type CloudinaryImageData = {
   versionMap: Map<string, number>
 }
 
+/** Strip image extensions so .jpeg/.png mismatch between MongoDB and Cloudinary does not affect fetching. */
+const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|avif|bmp|tiff?)(\?.*)?$/i
+
+function filenameToPublicId(s: string): string {
+  if (!s || typeof s !== 'string') return ''
+  const base = s.trim().replace(/^\//, '').replace(IMAGE_EXT_RE, '')
+  return base.replace(/\s*-\s*/g, '-')
+}
+
 function toPublicIdNormalized(s: string): string {
   if (!s || typeof s !== 'string') return ''
-  const base = s.trim().replace(/^\//, '').replace(/\.[^.]+$/, '')
+  const base = s.trim().replace(/^\//, '').replace(IMAGE_EXT_RE, '')
   let n = base.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase()
   const m = n.match(/^(.+)-\d+$/)
   if (m) n = m[1]
   return n
-}
-
-function filenameToPublicId(s: string): string {
-  if (!s || typeof s !== 'string') return ''
-  const base = s.trim().replace(/^\//, '').replace(/\.[^.]+$/, '')
-  return base.replace(/\s*-\s*/g, '-')
 }
 
 /**

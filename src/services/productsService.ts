@@ -81,9 +81,11 @@ function withCloudinaryTransform(url: string, transform: string): string {
   return url.replace('/upload/', `/upload/${transform}/`)
 }
 
+/** Strip image extensions so .jpeg/.png mismatch between MongoDB and Cloudinary does not affect fetching. */
+const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|avif|bmp|tiff?)(\?.*)?$/i
 function filenameToPublicId(s: string): string {
   if (!s || typeof s !== 'string') return ''
-  const base = s.trim().replace(/^\//, '').replace(/\.[^.]+$/, '')
+  const base = s.trim().replace(/^\//, '').replace(IMAGE_EXT_RE, '')
   return base.replace(/\s*-\s*/g, '-')
 }
 
