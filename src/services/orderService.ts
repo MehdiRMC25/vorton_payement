@@ -75,9 +75,12 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
 
 export async function getAllOrders(): Promise<Record<string, unknown>[]> {
   const result = await pool.query(
-    `SELECT id, order_number, customer_id, customer_name, mobile, membership_level,
-            address, items, total_price, order_date, delivery_due_date, status, created_at, updated_at
-     FROM orders ORDER BY order_date DESC`
+    `SELECT o.id, o.order_number, o.customer_id, o.customer_name, o.mobile, o.membership_level,
+            o.address, o.items, o.total_price, o.order_date, o.delivery_due_date, o.status, o.created_at, o.updated_at,
+            (SELECT osh.created_at FROM order_status_history osh
+             WHERE osh.order_id = o.id AND osh.status = 'DELIVERED'
+             ORDER BY osh.created_at DESC LIMIT 1) AS delivered_at
+     FROM orders o ORDER BY o.order_date DESC`
   );
   return result.rows.map(row => formatOrderRow(row));
 }
@@ -153,6 +156,7 @@ function formatOrderRow(row: Record<string, unknown>): Record<string, unknown> {
   const orderDate = row.order_date;
   const createdAt = row.created_at;
   const updatedAt = row.updated_at;
+  const deliveredAt = row.delivered_at;
   return {
     id: toStr(row.id),
     order_number: toStr(row.order_number),
@@ -165,6 +169,7 @@ function formatOrderRow(row: Record<string, unknown>): Record<string, unknown> {
     total_price: Number(row.total_price) || 0,
     order_date: orderDate instanceof Date ? orderDate.toISOString() : toStr(orderDate),
     delivery_due_date: row.delivery_due_date != null && row.delivery_due_date !== '' ? toStr(row.delivery_due_date) : null,
+    delivered_at: deliveredAt != null && deliveredAt !== '' ? (deliveredAt instanceof Date ? deliveredAt.toISOString() : toStr(deliveredAt)) : null,
     status: toStr(row.status) || 'NEW',
     created_at: createdAt instanceof Date ? createdAt.toISOString() : toStr(createdAt),
     updated_at: updatedAt instanceof Date ? updatedAt.toISOString() : toStr(updatedAt),
