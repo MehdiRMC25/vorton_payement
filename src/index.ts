@@ -88,6 +88,7 @@ async function start(): Promise<void> {
     try {
       const { pool } = await import('./db');
       await pool.query('SELECT 1 FROM payment_intents LIMIT 1');
+      await pool.query('ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS order_id VARCHAR(50)');
       console.log('[Payment] payment_intents table OK — orders will be created after restarts');
     } catch (e) {
       console.warn('[Payment] Run sql/payment-intents.sql on your database so new orders from payments are created after server restarts.');

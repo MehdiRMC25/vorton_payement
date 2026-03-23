@@ -176,6 +176,32 @@ export function getPaymentByBankOrderId(bankOrderId: string): PaymentIntent | nu
   return paymentId ? payments.get(paymentId) ?? null : null;
 }
 
+/** Returns the order_id if an order was already created for this bank order (idempotency). */
+export async function getCreatedOrderIdForBankOrder(bankOrderId: string): Promise<string | null> {
+  try {
+    const result = await pool.query(
+      `SELECT order_id FROM payment_intents WHERE bank_order_id = $1 AND order_id IS NOT NULL LIMIT 1`,
+      [bankOrderId]
+    );
+    const id = result.rows[0]?.order_id;
+    return id != null && id !== '' ? String(id) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist order_id so future confirm requests return the existing order instead of creating a duplicate. */
+export async function persistOrderIdForPayment(bankOrderId: string, orderId: string): Promise<void> {
+  try {
+    await pool.query(
+      `UPDATE payment_intents SET order_id = $1 WHERE bank_order_id = $2`,
+      [orderId, bankOrderId]
+    );
+  } catch (e) {
+    console.warn('[Payment] Could not persist order_id for bank order', bankOrderId, e);
+  }
+}
+
 const KAPITAL_STATUS_MAP: Record<string, PaymentIntent['status']> = {
   FullyPaid: 'succeeded',
   Paid: 'succeeded',

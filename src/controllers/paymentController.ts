@@ -5,6 +5,8 @@ import {
   getPaymentByBankOrderId,
   getPaymentByBankOrderIdFromDb,
   confirmAndPersistPaymentStatus,
+  getCreatedOrderIdForBankOrder,
+  persistOrderIdForPayment,
 } from '../services/paymentService';
 import { getTransactionDetails } from '../services/kapitalService';
 import * as orderService from '../services/orderService';
@@ -50,25 +52,35 @@ export async function confirm(req: Request, res: Response): Promise<void> {
   let createdOrder: Record<string, unknown> | null = null;
   if (updated?.status === 'succeeded' && updated?.orderPayload) {
     try {
-      const p = updated.orderPayload;
-      console.log('[Payment] Creating order for bank order', bankOrderId);
-      const result = await orderService.createOrder({
-        customer_id: typeof p.customer_id === 'number' ? p.customer_id : undefined,
-        customer_name: p.customer_name,
-        mobile: p.mobile,
-        membership_level: p.membership_level ?? 'none',
-        address: p.address ?? null,
-        items: p.items,
-        total_price: p.total_price,
-        delivery_due_date: p.delivery_due_date ?? null,
-      });
-      const order = await orderService.getOrderById(result.id);
-      if (order) {
-        createdOrder = order;
-        emitOrderCreated(order);
-        void sendOrderNotification(order);
+      const existingOrderId = await getCreatedOrderIdForBankOrder(bankOrderId);
+      if (existingOrderId) {
+        const order = await orderService.getOrderById(existingOrderId);
+        if (order) {
+          createdOrder = order;
+          console.log('[Payment] Returning existing order for bank order', bankOrderId, order.order_number);
+        }
+      } else {
+        const p = updated.orderPayload;
+        console.log('[Payment] Creating order for bank order', bankOrderId);
+        const result = await orderService.createOrder({
+          customer_id: typeof p.customer_id === 'number' ? p.customer_id : undefined,
+          customer_name: p.customer_name,
+          mobile: p.mobile,
+          membership_level: p.membership_level ?? 'none',
+          address: p.address ?? null,
+          items: p.items,
+          total_price: p.total_price,
+          delivery_due_date: p.delivery_due_date ?? null,
+        });
+        const order = await orderService.getOrderById(result.id);
+        if (order) {
+          createdOrder = order;
+          await persistOrderIdForPayment(bankOrderId, result.id);
+          emitOrderCreated(order);
+          void sendOrderNotification(order);
+        }
+        console.log('[Payment] Order created:', result.order_number);
       }
-      console.log('[Payment] Order created:', result.order_number);
     } catch (err) {
       const e = err as { message?: string; detail?: string; code?: string };
       console.error('[Payment] Create order on confirm failed:', e?.message || err, e?.detail || '');
