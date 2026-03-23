@@ -47,6 +47,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
   const verified = await getTransactionDetails(bankOrderId);
   const statusToUse = verified?.status ?? callbackStatus;
   const updated = await confirmAndPersistPaymentStatus(payment, statusToUse);
+  let createdOrder: Record<string, unknown> | null = null;
   if (updated?.status === 'succeeded' && updated?.orderPayload) {
     try {
       const p = updated.orderPayload;
@@ -63,6 +64,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
       });
       const order = await orderService.getOrderById(result.id);
       if (order) {
+        createdOrder = order;
         emitOrderCreated(order);
         void sendOrderNotification(order);
       }
@@ -74,7 +76,8 @@ export async function confirm(req: Request, res: Response): Promise<void> {
   } else {
     console.log('[Payment] Confirm skipped order creation: status=', updated?.status, 'hasOrderPayload=', !!updated?.orderPayload);
   }
-  res.json(updated ?? payment);
+  const payload = updated ?? payment;
+  res.json(createdOrder ? { ...payload, createdOrder } : payload);
 }
 
 export async function getStatus(req: Request, res: Response): Promise<void> {

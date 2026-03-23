@@ -27,7 +27,11 @@ export interface CreateOrderInput {
 }
 
 function generateOrderNumber(): string {
-  return 'ORD-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  const digits = Array.from({ length: 6 }, () => Math.floor(Math.random() * 10)).join('');
+  const letters = Array.from({ length: 4 }, () =>
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]
+  ).join('');
+  return `VRT-${digits}-${letters}`;
 }
 
 export async function createOrder(input: CreateOrderInput): Promise<{ id: string; order_number: string }> {
