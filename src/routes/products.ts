@@ -17,7 +17,12 @@ function toUserMessage(err: unknown): string {
 function omitDescriptions(product: Record<string, unknown>): Record<string, unknown> {
   if (!product || typeof product !== 'object') return product
   // Keep response light for list endpoints; descriptions are available via /api/products/:id.
-  const { descriptionEn: _en, descriptionAZ: _az, ...rest } = product as Record<string, unknown>
+  const {
+    descriptionEn: _en,
+    descriptionAZ: _az,
+    descriptionAz: _azMongo,
+    ...rest
+  } = product as Record<string, unknown>
   return rest
 }
 

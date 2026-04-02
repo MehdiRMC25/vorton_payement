@@ -11,10 +11,12 @@ let productsCollection: import('mongodb').Collection | null = null
 let indexesCreated = false
 
 const CACHE_TTL_MS = 60 * 1000
+/** Bump when normalized product shape changes so stale entries are not reused. */
+const PRODUCTS_CACHE_VERSION = 2
 const serverCache: {
-  all: { data: Record<string, unknown>[]; ts: number } | null
-  byCategory: Record<string, { data: Record<string, unknown>[]; ts: number }>
-  byId: Record<string, { data: Record<string, unknown>; ts: number }>
+  all: { data: Record<string, unknown>[]; ts: number; v: number } | null
+  byCategory: Record<string, { data: Record<string, unknown>[]; ts: number; v: number }>
+  byId: Record<string, { data: Record<string, unknown>; ts: number; v: number }>
 } = {
   all: null,
   byCategory: {},
@@ -26,7 +28,11 @@ const PROJECTION = {
   name: 1, Name: 1, ADI: 1, productName: 1, product_name: 1, productTitle: 1, product_title: 1,
   'Product Name': 1, 'Product Title': 1,
   title: 1, Title: 1, description: 1, itemName: 1, item_name: 1,
-  nameAz: 1, descriptionEn: 1, descriptionAZ: 1,
+  nameAz: 1,
+  /** Azerbaijani: DB uses descriptionAz; descriptionAZ kept for older docs */
+  descriptionAz: 1, descriptionAZ: 1,
+  /** English: common casing variants (Mongo field names are case-sensitive) */
+  descriptionEn: 1, descriptionEN: 1, description_en: 1,
   category: 1, gender: 1, Sex: 1,
   color: 1, Color: 1, colour: 1, Colour: 1, Rəngi: 1,
   fabric: 1, Fabric: 1, material: 1, Material: 1, fabricType: 1, FabricType: 1, 'Fabric Type': 1,
@@ -125,8 +131,8 @@ function getPrimaryPublicIdForDoc(doc: Record<string, unknown>): string | null {
   return toPublicIdNormalized(skuColor || String(doc.sku ?? '')) || null
 }
 
-function isCacheValid(entry: { ts: number } | null): boolean {
-  return !!entry && Date.now() - entry.ts < CACHE_TTL_MS
+function isCacheValid(entry: { ts: number; v: number } | null): boolean {
+  return !!entry && entry.v === PRODUCTS_CACHE_VERSION && Date.now() - entry.ts < CACHE_TTL_MS
 }
 
 /** Filter products: only include if image exists in Cloudinary. When existingIds is empty, skip filter (backward compat). */
@@ -246,9 +252,16 @@ function normalize(doc: Record<string, unknown> | null, versionMap: Map<string, 
     ?? doc['Product Name'] ?? doc['Product Title']
     ?? doc.title ?? doc.Title ?? doc.description ?? doc.itemName ?? doc.item_name ?? ''
   const name = String(rawName).trim()
-  const nameAz = typeof doc.nameAz === 'string' ? doc.nameAz.trim() : ''
-  const descriptionEn = typeof doc.descriptionEn === 'string' ? doc.descriptionEn.trim() : ''
-  const descriptionAZ = typeof doc.descriptionAZ === 'string' ? doc.descriptionAZ.trim() : ''
+  const strField = (v: unknown): string => {
+    if (v == null) return ''
+    if (typeof v === 'string') return v.trim()
+    return String(v).trim()
+  }
+  const nameAz = strField(doc.nameAz)
+  const descriptionEn = strField(
+    doc.descriptionEn ?? doc.descriptionEN ?? doc.description_en
+  )
+  const descriptionAZ = strField(doc.descriptionAz ?? doc.descriptionAZ)
   const rawFabric = doc.fabric ?? doc.Fabric ?? doc.material ?? doc.Material ?? doc.fabricType ?? doc.FabricType ?? doc['Fabric Type'] ?? ''
   const fabric = String(rawFabric).trim() || 'Not specified'
 
@@ -323,8 +336,11 @@ export async function getAllProducts(): Promise<{ list: Record<string, unknown>[
         try { return normalize(doc, versionMap) } catch (e) { console.warn('[products] normalize failed:', (e as Error).message); return null }
       })
       .filter((p): p is Record<string, unknown> => !!p)
-    serverCache.all = { data: products, ts: Date.now() }
-    products.forEach((p) => { if (p.id) serverCache.byId[String(p.id)] = { data: p, ts: Date.now() } })
+    const now = Date.now()
+    serverCache.all = { data: products, ts: now, v: PRODUCTS_CACHE_VERSION }
+    products.forEach((p) => {
+      if (p.id) serverCache.byId[String(p.id)] = { data: p, ts: now, v: PRODUCTS_CACHE_VERSION }
+    })
     return { list: products, fromFallback: false }
   } catch (err) {
     console.warn('[products] MongoDB failed —', (err as Error).message)
@@ -356,7 +372,13 @@ export async function getProductById(id: string): Promise<Record<string, unknown
     const primaryPublicId = doc ? getPrimaryPublicIdForDoc(doc) : null
     if (doc && !passesImageFilter(doc, primaryPublicId, existingIds)) return null
     const product = normalize(doc, versionMap)
-    if (product && product.id) serverCache.byId[String(product.id)] = { data: product, ts: Date.now() }
+    if (product && product.id) {
+      serverCache.byId[String(product.id)] = {
+        data: product,
+        ts: Date.now(),
+        v: PRODUCTS_CACHE_VERSION,
+      }
+    }
     return product
   } catch (err) {
     console.warn('[products] getProductById failed:', (err as Error).message)
@@ -383,7 +405,7 @@ export async function getProductsByCategory(category: string): Promise<Record<st
         try { return normalize(doc, versionMap) } catch (e) { return null }
       })
       .filter((p): p is Record<string, unknown> => !!p)
-    serverCache.byCategory[c] = { data: products, ts: Date.now() }
+    serverCache.byCategory[c] = { data: products, ts: Date.now(), v: PRODUCTS_CACHE_VERSION }
     return products
   } catch (err) {
     console.warn('[products] getProductsByCategory failed:', (err as Error).message)
