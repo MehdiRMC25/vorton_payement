@@ -59,14 +59,15 @@ export async function assignSilverToNewCustomer(customerId: number): Promise<voi
 }
 
 /**
- * Total spend for a customer from orders (AZN). Uses orders.total where status is completed/paid.
- * Adjust table/column names if your schema differs (e.g. amount instead of total, different status values).
+ * Total spend for a customer from orders (AZN). Uses total_price (matches orderService).
+ * Counts orders past NEW (PROCESSING / DISPATCHED / DELIVERED), case-insensitive.
  */
 export async function getCustomerTotalSpend(customerId: number): Promise<number> {
   const result = await pool.query(
-    `SELECT COALESCE(SUM(total), 0)::numeric AS total
-     FROM orders
-     WHERE customer_id = $1 AND status IN ('completed', 'paid', 'delivered', 'Done')`,
+    `SELECT COALESCE(SUM(COALESCE(o.total_price, 0)), 0)::numeric AS total
+     FROM orders o
+     WHERE o.customer_id = $1
+       AND UPPER(TRIM(COALESCE(o.status, ''))) IN ('PROCESSING', 'DISPATCHED', 'DELIVERED')`,
     [customerId]
   );
   const val = result.rows[0]?.total;
