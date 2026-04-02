@@ -12,7 +12,7 @@ let indexesCreated = false
 
 const CACHE_TTL_MS = 60 * 1000
 /** Bump when normalized product shape changes so stale entries are not reused. */
-const PRODUCTS_CACHE_VERSION = 2
+const PRODUCTS_CACHE_VERSION = 3
 const serverCache: {
   all: { data: Record<string, unknown>[]; ts: number; v: number } | null
   byCategory: Record<string, { data: Record<string, unknown>[]; ts: number; v: number }>
@@ -28,7 +28,7 @@ const PROJECTION = {
   name: 1, Name: 1, ADI: 1, productName: 1, product_name: 1, productTitle: 1, product_title: 1,
   'Product Name': 1, 'Product Title': 1,
   title: 1, Title: 1, description: 1, itemName: 1, item_name: 1,
-  nameAz: 1,
+  nameAz: 1, nameAZ: 1, NameAz: 1,
   /** Azerbaijani: DB uses descriptionAz; descriptionAZ kept for older docs */
   descriptionAz: 1, descriptionAZ: 1,
   /** English: common casing variants (Mongo field names are case-sensitive) */
@@ -257,7 +257,7 @@ function normalize(doc: Record<string, unknown> | null, versionMap: Map<string, 
     if (typeof v === 'string') return v.trim()
     return String(v).trim()
   }
-  const nameAz = strField(doc.nameAz)
+  const nameAz = strField(doc.nameAz ?? doc.nameAZ ?? doc.NameAz)
   const descriptionEn = strField(
     doc.descriptionEn ?? doc.descriptionEN ?? doc.description_en
   )
@@ -296,7 +296,9 @@ function normalize(doc: Record<string, unknown> | null, versionMap: Map<string, 
     name: name || String(doc.sku ?? ''),
     nameAz: nameAz || undefined,
     descriptionEn: descriptionEn || undefined,
+    /** Azerbaijani body copy (Mongo: descriptionAz); alias keys for clients */
     descriptionAZ: descriptionAZ || undefined,
+    descriptionAz: descriptionAZ || undefined,
     category: String(doc.category ?? doc.gender ?? doc.Sex ?? '').toLowerCase().trim(),
     color,
     fabric,
