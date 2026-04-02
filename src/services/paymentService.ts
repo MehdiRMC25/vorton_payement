@@ -17,8 +17,11 @@ export interface PendingOrderPayload {
   membership_level?: string;
   address?: string | null;
   items: Array<{ name: string; quantity: number; price: number; product_id?: string; sku_color?: string; size?: string; [key: string]: unknown }>;
+  /** Amount the customer pays after any points discount (must match bank `amount` when points are used). */
   total_price: number;
   delivery_due_date?: string | null;
+  /** Whole points to redeem on this order; omit or 0 to pay full price. */
+  points_to_redeem?: number;
 }
 
 export interface CreatePaymentInput {

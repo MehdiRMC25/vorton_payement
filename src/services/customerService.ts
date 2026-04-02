@@ -66,7 +66,8 @@ export async function getCustomerByIdSafe(id: number) {
   const result = await pool.query(
     `SELECT id, first_name, last_name, email, phone, second_phone, membership_number,
             address_line1, address_line2, city, postcode, country, created_at,
-            COALESCE(role, 'customer') AS role
+            COALESCE(role, 'customer') AS role,
+            COALESCE(reward_points_balance, 0)::int AS reward_points_balance
      FROM customers WHERE id = $1`,
     [id]
   );

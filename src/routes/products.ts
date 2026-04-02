@@ -14,6 +14,13 @@ function toUserMessage(err: unknown): string {
   return m || 'Server error.'
 }
 
+function omitDescriptions(product: Record<string, unknown>): Record<string, unknown> {
+  if (!product || typeof product !== 'object') return product
+  // Keep response light for list endpoints; descriptions are available via /api/products/:id.
+  const { descriptionEn: _en, descriptionAZ: _az, ...rest } = product as Record<string, unknown>
+  return rest
+}
+
 /** GET /api/home-videos */
 router.get('/home-videos', async (_req: Request, res: Response) => {
   try {
@@ -33,7 +40,7 @@ router.get('/product-variants/:baseSku', async (req: Request, res: Response) => 
     }
     const variants = await productsService.getVariantsByBaseSku(baseSku)
     res.set('Cache-Control', 'public, max-age=300, s-maxage=300')
-    res.json({ ok: true, variants })
+    res.json({ ok: true, variants: variants.map(omitDescriptions) })
   } catch (err) {
     const msg = toUserMessage(err)
     res.status(500).json({ ok: false, error: msg })
@@ -93,7 +100,7 @@ router.get('/products', async (req: Request, res: Response) => {
     }
 
     res.set('Cache-Control', 'public, max-age=300, s-maxage=300')
-    res.json({ ok: true, products: list, fromFallback })
+    res.json({ ok: true, products: list.map(omitDescriptions), fromFallback })
   } catch (err) {
     const msg = toUserMessage(err)
     res.status(500).json({ ok: false, error: msg })

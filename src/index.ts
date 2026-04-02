@@ -93,6 +93,41 @@ async function start(): Promise<void> {
     } catch (e) {
       console.warn('[Payment] Run sql/payment-intents.sql on your database so new orders from payments are created after server restarts.');
     }
+    try {
+      const { pool: poolReward } = await import('./db');
+      await poolReward.query(
+        'ALTER TABLE customers ADD COLUMN IF NOT EXISTS reward_points_balance INT NOT NULL DEFAULT 0'
+      );
+      await poolReward.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS points_earned INT NOT NULL DEFAULT 0');
+      await poolReward.query(
+        'ALTER TABLE orders ADD COLUMN IF NOT EXISTS points_redeemed INT NOT NULL DEFAULT 0'
+      );
+      await poolReward.query(
+        'ALTER TABLE orders ADD COLUMN IF NOT EXISTS reward_discount_azn NUMERIC(12,2) NOT NULL DEFAULT 0'
+      );
+      await poolReward.query(`
+        CREATE TABLE IF NOT EXISTS reward_points_ledger (
+          id SERIAL PRIMARY KEY,
+          customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          order_id VARCHAR(64) NOT NULL,
+          points_delta INT NOT NULL,
+          balance_after INT NOT NULL,
+          reward_azn NUMERIC(12,4),
+          tier_percent NUMERIC(5,2),
+          eligible_subtotal_azn NUMERIC(12,2),
+          reason VARCHAR(80) NOT NULL DEFAULT 'purchase',
+          expires_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (order_id, reason)
+        )
+      `);
+      await poolReward.query(
+        'CREATE INDEX IF NOT EXISTS idx_reward_points_ledger_customer_id ON reward_points_ledger(customer_id)'
+      );
+      console.log('[RewardPoints] Schema OK — customer balances and ledger');
+    } catch (e) {
+      console.warn('[RewardPoints] Schema setup skipped:', e instanceof Error ? e.message : e);
+    }
   }
 
   // Log Kapital Bank config (payments only persist when real bank is used)

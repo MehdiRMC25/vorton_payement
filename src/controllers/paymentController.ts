@@ -7,9 +7,12 @@ import {
   confirmAndPersistPaymentStatus,
   getCreatedOrderIdForBankOrder,
   persistOrderIdForPayment,
+  type PendingOrderPayload,
 } from '../services/paymentService';
+import { assertPaymentAmountMatchesOrder } from '../services/paymentOrderValidation';
 import { getTransactionDetails } from '../services/kapitalService';
 import * as orderService from '../services/orderService';
+import { tryAwardRewardPointsForOrder } from '../services/rewardPointsService';
 import { sendOrderNotification } from '../services/emailService';
 import { emitOrderCreated } from '../socket';
 
@@ -18,6 +21,15 @@ export async function create(req: Request, res: Response): Promise<void> {
     const body = req.body as Record<string, unknown>;
     const hasOrder = body && typeof body.order === 'object' && body.order !== null;
     console.log('[Payment] Create request: hasOrder=', hasOrder);
+    if (hasOrder) {
+      try {
+        assertPaymentAmountMatchesOrder(Number(body.amount), body.order as PendingOrderPayload);
+      } catch (ve) {
+        const msg = ve instanceof Error ? ve.message : 'Invalid payment amount for order';
+        res.status(400).json({ error: msg });
+        return;
+      }
+    }
     const result = await createPaymentIntent(req.body);
     console.log('[Payment] Create succeeded: bankOrderId=', (result as { bankOrderId?: string }).bankOrderId);
     res.status(201).json(result);
@@ -61,7 +73,17 @@ export async function confirm(req: Request, res: Response): Promise<void> {
         }
       } else {
         const p = updated.orderPayload;
+        try {
+          assertPaymentAmountMatchesOrder(updated.amount, p);
+        } catch (ve) {
+          console.error('[Payment] Amount/order mismatch on confirm:', ve);
+          throw ve;
+        }
         console.log('[Payment] Creating order for bank order', bankOrderId);
+        const pts =
+          typeof p.points_to_redeem === 'number' && Number.isFinite(p.points_to_redeem)
+            ? Math.floor(p.points_to_redeem)
+            : 0;
         const result = await orderService.createOrder({
           customer_id: typeof p.customer_id === 'number' ? p.customer_id : undefined,
           customer_name: p.customer_name,
@@ -71,13 +93,20 @@ export async function confirm(req: Request, res: Response): Promise<void> {
           items: p.items,
           total_price: p.total_price,
           delivery_due_date: p.delivery_due_date ?? null,
+          points_to_redeem: pts > 0 ? pts : undefined,
         });
-        const order = await orderService.getOrderById(result.id);
+        let order = await orderService.getOrderById(result.id);
         if (order) {
-          createdOrder = order;
           await persistOrderIdForPayment(bankOrderId, result.id);
-          emitOrderCreated(order);
-          void sendOrderNotification(order);
+          await tryAwardRewardPointsForOrder({
+            id: String(order.id),
+            customer_id: order.customer_id != null ? Number(order.customer_id) : null,
+            items: Array.isArray(order.items) ? (order.items as orderService.OrderItem[]) : [],
+          });
+          const refreshed = await orderService.getOrderById(result.id);
+          createdOrder = refreshed ?? order;
+          emitOrderCreated(createdOrder);
+          void sendOrderNotification(createdOrder);
         }
         console.log('[Payment] Order created:', result.order_number);
       }

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as orderService from '../services/orderService';
+import { tryAwardRewardPointsForOrder } from '../services/rewardPointsService';
 import { sendOrderNotification } from '../services/emailService';
 import { emitOrderCreated, emitOrderStatusUpdated } from '../socket';
 
@@ -79,6 +80,10 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
     const items = Array.isArray(body.items) ? body.items as orderService.OrderItem[] : [];
     const total_price = Number(body.total_price);
     const delivery_due_date = body.delivery_due_date != null ? String(body.delivery_due_date) : null;
+    const points_to_redeem =
+      body.points_to_redeem != null && body.points_to_redeem !== ''
+        ? Math.floor(Number(body.points_to_redeem))
+        : undefined;
 
     if (!customer_id || !customer_name || !mobile) {
       res.status(400).json({ error: 'customer_id, customer_name, and mobile are required' });
@@ -98,10 +103,17 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
       items,
       total_price,
       delivery_due_date,
+      points_to_redeem: points_to_redeem != null && points_to_redeem > 0 ? points_to_redeem : undefined,
     });
 
-    const order = await orderService.getOrderById(result.id);
+    let order = await orderService.getOrderById(result.id);
     if (order) {
+      await tryAwardRewardPointsForOrder({
+        id: String(order.id),
+        customer_id: order.customer_id != null ? Number(order.customer_id) : null,
+        items: Array.isArray(order.items) ? (order.items as orderService.OrderItem[]) : [],
+      });
+      order = (await orderService.getOrderById(result.id)) ?? order;
       emitOrderCreated(order);
       void sendOrderNotification(order);
     }

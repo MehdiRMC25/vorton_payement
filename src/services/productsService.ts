@@ -26,6 +26,7 @@ const PROJECTION = {
   name: 1, Name: 1, ADI: 1, productName: 1, product_name: 1, productTitle: 1, product_title: 1,
   'Product Name': 1, 'Product Title': 1,
   title: 1, Title: 1, description: 1, itemName: 1, item_name: 1,
+  nameAz: 1, descriptionEn: 1, descriptionAZ: 1,
   category: 1, gender: 1, Sex: 1,
   color: 1, Color: 1, colour: 1, Colour: 1, Rəngi: 1,
   fabric: 1, Fabric: 1, material: 1, Material: 1, fabricType: 1, FabricType: 1, 'Fabric Type': 1,
@@ -245,6 +246,9 @@ function normalize(doc: Record<string, unknown> | null, versionMap: Map<string, 
     ?? doc['Product Name'] ?? doc['Product Title']
     ?? doc.title ?? doc.Title ?? doc.description ?? doc.itemName ?? doc.item_name ?? ''
   const name = String(rawName).trim()
+  const nameAz = typeof doc.nameAz === 'string' ? doc.nameAz.trim() : ''
+  const descriptionEn = typeof doc.descriptionEn === 'string' ? doc.descriptionEn.trim() : ''
+  const descriptionAZ = typeof doc.descriptionAZ === 'string' ? doc.descriptionAZ.trim() : ''
   const rawFabric = doc.fabric ?? doc.Fabric ?? doc.material ?? doc.Material ?? doc.fabricType ?? doc.FabricType ?? doc['Fabric Type'] ?? ''
   const fabric = String(rawFabric).trim() || 'Not specified'
 
@@ -277,6 +281,9 @@ function normalize(doc: Record<string, unknown> | null, versionMap: Map<string, 
     sku: String(doc.sku ?? ''),
     skuColor: skuColor || undefined,
     name: name || String(doc.sku ?? ''),
+    nameAz: nameAz || undefined,
+    descriptionEn: descriptionEn || undefined,
+    descriptionAZ: descriptionAZ || undefined,
     category: String(doc.category ?? doc.gender ?? doc.Sex ?? '').toLowerCase().trim(),
     color,
     fabric,
