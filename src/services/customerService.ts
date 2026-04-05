@@ -73,3 +73,66 @@ export async function getCustomerByIdSafe(id: number) {
   );
   return result.rows[0];
 }
+
+/** Full row including password_hash — server-side only. */
+export async function getCustomerRowById(id: number) {
+  const result = await pool.query(`SELECT * FROM customers WHERE id = $1`, [id]);
+  return result.rows[0];
+}
+
+/** Find another customer using this phone (excluding id). */
+export async function findCustomerIdByPhoneExcluding(phone: string, excludeId: number): Promise<number | null> {
+  const result = await pool.query(
+    `SELECT id FROM customers WHERE phone = $1 AND id <> $2 LIMIT 1`,
+    [phone, excludeId]
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+/** Find another customer using this email (excluding id). */
+export async function findCustomerIdByEmailExcluding(email: string, excludeId: number): Promise<number | null> {
+  const result = await pool.query(
+    `SELECT id FROM customers WHERE LOWER(TRIM(email)) = LOWER(TRIM($1)) AND id <> $2 LIMIT 1`,
+    [email, excludeId]
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+export type CustomerProfilePatch = {
+  first_name?: string | null;
+  last_name?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  postcode?: string | null;
+  country?: string | null;
+  phone?: string;
+};
+
+/** Updates only keys that are present (not undefined). Null clears optional text fields. */
+export async function patchCustomerProfile(id: number, patch: CustomerProfilePatch): Promise<void> {
+  const entries = Object.entries(patch).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return;
+  const allowed = new Set([
+    'first_name',
+    'last_name',
+    'address_line1',
+    'address_line2',
+    'city',
+    'postcode',
+    'country',
+    'phone',
+  ]);
+  const cols = entries.filter(([k]) => allowed.has(k));
+  if (cols.length === 0) return;
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  let i = 1;
+  for (const [key, val] of cols) {
+    sets.push(`${key} = $${i}`);
+    values.push(val);
+    i += 1;
+  }
+  values.push(id);
+  await pool.query(`UPDATE customers SET ${sets.join(', ')} WHERE id = $${i}`, values);
+}

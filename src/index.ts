@@ -128,6 +128,36 @@ async function start(): Promise<void> {
     } catch (e) {
       console.warn('[RewardPoints] Schema setup skipped:', e instanceof Error ? e.message : e);
     }
+    try {
+      const { pool: poolProfile } = await import('./db');
+      await poolProfile.query(`
+        CREATE TABLE IF NOT EXISTS email_change_pending (
+          id SERIAL PRIMARY KEY,
+          customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          new_email VARCHAR(255) NOT NULL,
+          code_hash VARCHAR(255) NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(customer_id)
+        )
+      `);
+      await poolProfile.query(`
+        CREATE TABLE IF NOT EXISTS customer_delivery_contact_log (
+          id SERIAL PRIMARY KEY,
+          customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          phone VARCHAR(64),
+          address_text TEXT,
+          source VARCHAR(32) NOT NULL DEFAULT 'checkout',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await poolProfile.query(
+        'CREATE INDEX IF NOT EXISTS idx_delivery_contact_customer ON customer_delivery_contact_log(customer_id)'
+      );
+      console.log('[Profile] email_change_pending and customer_delivery_contact_log OK');
+    } catch (e) {
+      console.warn('[Profile] Schema setup skipped:', e instanceof Error ? e.message : e);
+    }
   }
 
   // Log Kapital Bank config (payments only persist when real bank is used)

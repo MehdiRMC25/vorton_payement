@@ -1,5 +1,33 @@
 import { config } from '../config';
 
+/**
+ * Never pass through raw HTML (e.g. Cloudflare 520 bodies) or huge payloads to API clients.
+ */
+function summarizeKapitalError(status: number, rawText: string): string {
+  const t = rawText.trim();
+  if (!t) {
+    return `Kapital Bank request failed (HTTP ${status}). Please try again later.`;
+  }
+  if (/<!DOCTYPE|<\s*html/i.test(t)) {
+    return `Kapital Bank is temporarily unavailable (HTTP ${status}). Please try again in a few minutes.`;
+  }
+  if (t.startsWith('{')) {
+    try {
+      const j = JSON.parse(t) as { message?: string; error?: string; detail?: string };
+      const inner = [j.message, j.error, j.detail].find((x) => typeof x === 'string' && x.trim()) as string | undefined;
+      if (inner && !/<!DOCTYPE|<\s*html/i.test(inner) && inner.length < 400) {
+        return `Kapital Bank (${status}): ${inner.trim()}`;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  if (t.length > 280) {
+    return `Kapital Bank returned an error (HTTP ${status}). Please try again later or contact support if this continues.`;
+  }
+  return `Kapital Bank error (${status}): ${t}`;
+}
+
 /** Kapital Bank Create Order request (Purchase - Order_SMS) */
 export interface KapitalCreateOrderParams {
   amount: number;
@@ -55,8 +83,8 @@ export async function createOrder(params: KapitalCreateOrderParams): Promise<Kap
   });
   if (!res.ok) {
     const text = await res.text();
-    console.error('[Kapital] POST failed', res.status, 'URL:', url, 'Response:', text.slice(0, 300));
-    throw new Error(`Kapital Bank error (${res.status}): ${text}`);
+    console.error('[Kapital] POST failed', res.status, 'URL:', url, 'Response:', text.slice(0, 500));
+    throw new Error(summarizeKapitalError(res.status, text));
   }
   const data = (await res.json()) as Record<string, unknown> & { order?: Record<string, unknown> };
   const raw: Record<string, unknown> =

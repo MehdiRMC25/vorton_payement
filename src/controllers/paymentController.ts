@@ -16,6 +16,17 @@ import { tryAwardRewardPointsForOrder } from '../services/rewardPointsService';
 import { sendOrderNotification } from '../services/emailService';
 import { emitOrderCreated } from '../socket';
 
+/** Avoid sending HTML blobs or multi-KB strings to browsers. */
+function sanitizePaymentErrorForClient(message: string): string {
+  if (!message || message.length > 600) {
+    return 'Payment could not be started. Please try again later.';
+  }
+  if (/<!DOCTYPE|<\s*html/i.test(message)) {
+    return 'The payment service returned an unexpected response. Please try again later.';
+  }
+  return message;
+}
+
 export async function create(req: Request, res: Response): Promise<void> {
   try {
     const body = req.body as Record<string, unknown>;
@@ -34,8 +45,9 @@ export async function create(req: Request, res: Response): Promise<void> {
     console.log('[Payment] Create succeeded: bankOrderId=', (result as { bankOrderId?: string }).bankOrderId);
     res.status(201).json(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Payment creation failed';
-    console.error('[Payment] Create failed:', message);
+    const raw = e instanceof Error ? e.message : 'Payment creation failed';
+    const message = sanitizePaymentErrorForClient(raw);
+    console.error('[Payment] Create failed:', raw);
     res.status(500).json({ error: message });
   }
 }

@@ -54,6 +54,31 @@ function buildOrderEmailBody(order: OrderForEmail): string {
  * Send order notification to EMAIL_TO (orders@vorton.com).
  * From: EMAIL_FROM (bot@vorton.uk). Requires EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS.
  */
+/**
+ * Send a one-time code to verify a new email address (profile change).
+ */
+export async function sendEmailChangeCode(to: string, code: string): Promise<boolean> {
+  const { host, port, user, pass, from } = config.email;
+  if (!host || !user || !pass) {
+    console.warn('[Email] Skipping email change code: EMAIL_HOST, EMAIL_USER, EMAIL_PASS not configured');
+    return false;
+  }
+  const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+  try {
+    await transporter.sendMail({
+      from: from || user,
+      to,
+      subject: '[Vorton] Verify your new email address',
+      text: `Your verification code is: ${code}\n\nThis code expires in 15 minutes. If you did not request this, you can ignore this email.`,
+    });
+    console.log('[Email] Email change code sent to', to);
+    return true;
+  } catch (err) {
+    console.error('[Email] Email change code failed:', err);
+    return false;
+  }
+}
+
 export async function sendOrderNotification(order: OrderForEmail): Promise<boolean> {
   const { host, port, user, pass, from, to } = config.email;
   if (!host || !user || !pass) {
