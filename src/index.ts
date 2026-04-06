@@ -165,6 +165,27 @@ async function start(): Promise<void> {
     } catch (e) {
       console.warn('[Profile] Schema setup skipped:', e instanceof Error ? e.message : e);
     }
+    try {
+      const { pool: poolCart } = await import('./db');
+      await poolCart.query(`
+        CREATE TABLE IF NOT EXISTS cart_items (
+          id BIGSERIAL PRIMARY KEY,
+          user_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          product_id TEXT NOT NULL,
+          sku_color TEXT NOT NULL,
+          size TEXT NOT NULL,
+          quantity INT NOT NULL CHECK (quantity > 0),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (user_id, sku_color, size)
+        )
+      `);
+      await poolCart.query(
+        'CREATE INDEX IF NOT EXISTS cart_items_user_id_idx ON cart_items(user_id)'
+      );
+      console.log('[Cart] cart_items table OK');
+    } catch (e) {
+      console.warn('[Cart] Schema setup skipped:', e instanceof Error ? e.message : e);
+    }
   }
 
   // Log Kapital Bank config (payments only persist when real bank is used)

@@ -93,6 +93,15 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
   }
   try {
     const body = req.body as Record<string, unknown>;
+
+    // Debug aid: log which keys arrived (avoid printing PII values).
+    // Enable by setting PROFILE_PATCH_DEBUG=1 in env.
+    if (process.env.PROFILE_PATCH_DEBUG === '1') {
+      const keys = body && typeof body === 'object' ? Object.keys(body).slice(0, 50) : [];
+      console.log('[ProfilePatch] keys:', keys);
+      console.log('[ProfilePatch] has second_email:', Object.prototype.hasOwnProperty.call(body, 'second_email') || Object.prototype.hasOwnProperty.call(body, 'secondEmail'));
+      console.log('[ProfilePatch] has address_line2:', Object.prototype.hasOwnProperty.call(body, 'address_line2'));
+    }
     const row = await getCustomerRowById(uid);
     if (!row) {
       res.status(404).json({ error: 'Account not found' });
