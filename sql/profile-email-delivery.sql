@@ -20,4 +20,8 @@ CREATE TABLE IF NOT EXISTS customer_delivery_contact_log (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE customer_delivery_contact_log
+  ADD COLUMN IF NOT EXISTS order_id UUID REFERENCES orders(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_delivery_contact_customer ON customer_delivery_contact_log(customer_id);
+CREATE INDEX IF NOT EXISTS idx_delivery_contact_order_id ON customer_delivery_contact_log(order_id);

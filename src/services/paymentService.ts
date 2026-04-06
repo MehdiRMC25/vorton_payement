@@ -22,6 +22,8 @@ export interface PendingOrderPayload {
   delivery_due_date?: string | null;
   /** Whole points to redeem on this order; omit or 0 to pay full price. */
   points_to_redeem?: number;
+  /** Row id from POST /auth/checkout-delivery — linked to the order after payment succeeds. */
+  delivery_contact_log_id?: number;
 }
 
 export interface CreatePaymentInput {

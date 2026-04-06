@@ -15,6 +15,7 @@ import * as orderService from '../services/orderService';
 import { tryAwardRewardPointsForOrder } from '../services/rewardPointsService';
 import { sendOrderNotification } from '../services/emailService';
 import { emitOrderCreated } from '../socket';
+import { linkDeliveryLogToOrder } from '../services/deliveryContactLogService';
 
 /** Avoid sending HTML blobs or multi-KB strings to browsers. */
 function sanitizePaymentErrorForClient(message: string): string {
@@ -82,6 +83,15 @@ export async function confirm(req: Request, res: Response): Promise<void> {
         if (order) {
           createdOrder = order;
           console.log('[Payment] Returning existing order for bank order', bankOrderId, order.order_number);
+          const p = updated.orderPayload as PendingOrderPayload;
+          const logIdRetry =
+            typeof p.delivery_contact_log_id === 'number' && Number.isFinite(p.delivery_contact_log_id)
+              ? Math.floor(p.delivery_contact_log_id)
+              : undefined;
+          const custIdRetry = typeof p.customer_id === 'number' ? p.customer_id : undefined;
+          if (logIdRetry != null && logIdRetry > 0 && custIdRetry != null) {
+            await linkDeliveryLogToOrder(logIdRetry, String(order.id), custIdRetry);
+          }
         }
       } else {
         const p = updated.orderPayload;
@@ -107,6 +117,14 @@ export async function confirm(req: Request, res: Response): Promise<void> {
           delivery_due_date: p.delivery_due_date ?? null,
           points_to_redeem: pts > 0 ? pts : undefined,
         });
+        const logId =
+          typeof p.delivery_contact_log_id === 'number' && Number.isFinite(p.delivery_contact_log_id)
+            ? Math.floor(p.delivery_contact_log_id)
+            : undefined;
+        const custId = typeof p.customer_id === 'number' ? p.customer_id : undefined;
+        if (logId != null && logId > 0 && custId != null) {
+          await linkDeliveryLogToOrder(logId, result.id, custId);
+        }
         let order = await orderService.getOrderById(result.id);
         if (order) {
           await persistOrderIdForPayment(bankOrderId, result.id);

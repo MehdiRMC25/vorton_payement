@@ -308,13 +308,15 @@ export async function appendCheckoutDelivery(req: Request, res: Response): Promi
       return;
     }
 
-    await pool.query(
+    const insert = await pool.query(
       `INSERT INTO customer_delivery_contact_log (customer_id, phone, address_text, source)
-       VALUES ($1, $2, $3, 'checkout')`,
+       VALUES ($1, $2, $3, 'checkout')
+       RETURNING id`,
       [uid, phoneRaw || null, addressRaw || null]
     );
+    const rowId = insert.rows[0]?.id as number | undefined;
 
-    res.status(201).json({ ok: true });
+    res.status(201).json({ ok: true, id: rowId });
   } catch (err) {
     console.error('appendCheckoutDelivery:', err);
     res.status(500).json({ error: 'Could not save delivery details.' });

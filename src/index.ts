@@ -152,7 +152,14 @@ async function start(): Promise<void> {
         )
       `);
       await poolProfile.query(
+        `ALTER TABLE customer_delivery_contact_log
+         ADD COLUMN IF NOT EXISTS order_id UUID REFERENCES orders(id) ON DELETE SET NULL`
+      );
+      await poolProfile.query(
         'CREATE INDEX IF NOT EXISTS idx_delivery_contact_customer ON customer_delivery_contact_log(customer_id)'
+      );
+      await poolProfile.query(
+        'CREATE INDEX IF NOT EXISTS idx_delivery_contact_order_id ON customer_delivery_contact_log(order_id)'
       );
       console.log('[Profile] email_change_pending and customer_delivery_contact_log OK');
     } catch (e) {
