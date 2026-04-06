@@ -50,6 +50,12 @@ function normalizePhone(input: string | null): string | null {
   return input.replace(/\s+/g, '');
 }
 
+function normalizeEmail(input: string | null): string | null {
+  if (!input) return null;
+  const e = input.trim().toLowerCase();
+  return e || null;
+}
+
 /** POST /api/v1/auth/signup */
 export async function signup(req: Request, res: Response): Promise<void> {
   try {
@@ -59,7 +65,13 @@ export async function signup(req: Request, res: Response): Promise<void> {
     const lastName = pickString(body, ['last_name', 'lastName']);
     const phone = normalizePhone(pickString(body, ['phone', 'phoneNumber', 'mobile', 'mobileNumber', 'mobile_number']));
     const secondPhone = normalizePhone(pickString(body, ['second_phone', 'secondPhone', 'second_mobile', 'mobile_secondary']));
-    const email = pickString(body, ['email', 'emailAddress', 'Email']);
+    const thirdPhone = normalizePhone(pickString(body, ['third_phone', 'thirdPhone', 'third_mobile', 'mobile_tertiary']));
+    const emailRaw = pickString(body, ['email', 'emailAddress', 'Email']);
+    const secondEmailRaw = pickString(body, ['second_email', 'secondEmail', 'email_secondary']);
+    const thirdEmailRaw = pickString(body, ['third_email', 'thirdEmail', 'email_tertiary']);
+    const email = normalizeEmail(emailRaw);
+    const secondEmail = normalizeEmail(secondEmailRaw);
+    const thirdEmail = normalizeEmail(thirdEmailRaw);
     const password = pickString(body, ['password']);
     const confirmPassword = pickString(body, ['confirm_password', 'confirmPassword', 'passwordConfirmation', 'password_confirmation']) ?? password;
     const addressLine1 = pickString(body, ['address_line1', 'addressLine1']);
@@ -79,6 +91,36 @@ export async function signup(req: Request, res: Response): Promise<void> {
     }
     if (email && !isValidEmail(email)) {
       res.status(400).json({ error: 'Invalid email address' });
+      return;
+    }
+    if (secondEmail && !isValidEmail(secondEmail)) {
+      res.status(400).json({ error: 'Invalid email address' });
+      return;
+    }
+    if (thirdEmail && !isValidEmail(thirdEmail)) {
+      res.status(400).json({ error: 'Invalid email address' });
+      return;
+    }
+    if (secondPhone && !isValidMobile(secondPhone)) {
+      res.status(400).json({ error: 'Invalid mobile number' });
+      return;
+    }
+    if (thirdPhone && !isValidMobile(thirdPhone)) {
+      res.status(400).json({ error: 'Invalid mobile number' });
+      return;
+    }
+
+    // Prevent duplicates within the same customer (emails & phones).
+    const emails = [email, secondEmail, thirdEmail].filter((x): x is string => !!x);
+    const uniqueEmails = new Set(emails.map(e => e.trim().toLowerCase()));
+    if (uniqueEmails.size !== emails.length) {
+      res.status(400).json({ error: 'Email addresses must be different.' });
+      return;
+    }
+    const phones = [phone, secondPhone, thirdPhone].filter((x): x is string => !!x);
+    const uniquePhones = new Set(phones.map(p => p.replace(/\s+/g, '')));
+    if (uniquePhones.size !== phones.length) {
+      res.status(400).json({ error: 'Mobile numbers must be different.' });
       return;
     }
     if (!password || password.length < 6) {
@@ -109,9 +151,24 @@ export async function signup(req: Request, res: Response): Promise<void> {
       res.status(409).json({ error: 'Account already exists. Please sign in.' });
       return;
     }
-    if (email) {
-      const existingByEmail = await getCustomerByEmailOrPhone(email);
-      if (existingByEmail) {
+    if (secondPhone) {
+      const existingBySecondPhone = await getCustomerByEmailOrPhone(secondPhone);
+      if (existingBySecondPhone) {
+        res.status(409).json({ error: 'Account already exists. Please sign in.' });
+        return;
+      }
+    }
+    if (thirdPhone) {
+      const existingByThirdPhone = await getCustomerByEmailOrPhone(thirdPhone);
+      if (existingByThirdPhone) {
+        res.status(409).json({ error: 'Account already exists. Please sign in.' });
+        return;
+      }
+    }
+    for (const e of [email, secondEmail, thirdEmail]) {
+      if (!e) continue;
+      const existing = await getCustomerByEmailOrPhone(e);
+      if (existing) {
         res.status(409).json({ error: 'Account already exists. Please sign in.' });
         return;
       }
@@ -125,8 +182,11 @@ export async function signup(req: Request, res: Response): Promise<void> {
       first_name,
       last_name,
       email,
+      second_email: secondEmail,
+      third_email: thirdEmail,
       phone,
       second_phone: secondPhone ?? null,
+      third_phone: thirdPhone ?? null,
       password_hash,
       password_salt,
       membership_number,
