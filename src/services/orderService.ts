@@ -3,6 +3,7 @@ import { pool } from '../db';
 import { getCustomerMembership } from './membershipService';
 import {
   merchandiseGrossAznFromItems,
+  computeEligibleSubtotalAzn,
   validateRedemptionRequest,
 } from './rewardPointsPolicy';
 
@@ -103,6 +104,18 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
   const order_number = generateOrderNumber();
   const gross = merchandiseGrossAznFromItems(input.items || []);
   const ptsReq = Math.max(0, Math.floor(Number(input.points_to_redeem) || 0));
+  // Points can only be redeemed against eligible (non-discounted, non-service) lines.
+  const eligibleSubtotalAzn = computeEligibleSubtotalAzn(
+    (input.items || []).map((it) => ({
+      quantity: it.quantity,
+      price: Number(it.price) || 0,
+      is_discounted: it.is_discounted === true || (typeof it.is_discounted === 'string' && it.is_discounted === 'true'),
+      promotional:
+        it.promotional === true ||
+        (typeof it.promotional === 'string' && it.promotional === 'true') ||
+        (typeof it.product_id === 'string' && it.product_id === '__delivery__'),
+    }))
+  );
 
   const client = await pool.connect();
   try {
@@ -128,7 +141,7 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
         throw new Error('Customer not found for points redemption');
       }
       const balance = Number(balRes.rows[0].b) || 0;
-      const v = validateRedemptionRequest(ptsReq, gross, balance);
+      const v = validateRedemptionRequest(ptsReq, eligibleSubtotalAzn, balance);
       if (!v.ok) {
         throw new Error(v.error);
       }

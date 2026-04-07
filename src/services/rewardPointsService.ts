@@ -15,7 +15,8 @@ function itemsToLines(items: OrderItem[]): LineForPoints[] {
       (typeof it.is_discounted === 'string' && it.is_discounted === 'true'),
     promotional:
       it.promotional === true ||
-      (typeof it.promotional === 'string' && it.promotional === 'true'),
+      (typeof it.promotional === 'string' && it.promotional === 'true') ||
+      (typeof it.product_id === 'string' && it.product_id === '__delivery__'),
   }));
 }
 
