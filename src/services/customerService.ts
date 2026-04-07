@@ -127,6 +127,7 @@ export async function findCustomerIdByEmailExcluding(email: string, excludeId: n
 export type CustomerProfilePatch = {
   first_name?: string | null;
   last_name?: string | null;
+  email?: string | null;
   address_line1?: string | null;
   address_line2?: string | null;
   city?: string | null;
@@ -146,6 +147,7 @@ export async function patchCustomerProfile(id: number, patch: CustomerProfilePat
   const allowed = new Set([
     'first_name',
     'last_name',
+    'email',
     'address_line1',
     'address_line2',
     'city',

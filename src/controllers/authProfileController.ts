@@ -112,6 +112,7 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
     const currentPhone = normalizePhone(pickString(body, ['current_phone', 'currentPhone']));
     const password = pickString(body, ['password']);
 
+    const emailField = pickNullableStringField(body, ['email']);
     const secondPhoneField = pickNullableStringField(body, ['second_phone', 'secondPhone', 'second_mobile', 'mobile_secondary']);
     const thirdPhoneField = pickNullableStringField(body, ['third_phone', 'thirdPhone', 'third_mobile', 'mobile_tertiary']);
     const secondEmailField = pickNullableStringField(body, ['second_email', 'secondEmail', 'email_secondary']);
@@ -138,12 +139,11 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
     const country =
       body.country !== undefined ? (typeof body.country === 'string' ? body.country.trim() || null : null) : undefined;
 
-    if (body.email !== undefined && pickString(body, ['email'])) {
-      res.status(400).json({ error: 'Use the email verification flow to change email.' });
+    // Validate email + secondary/tertiary email + phone types if they were explicitly provided.
+    if (emailField.present && (emailField.value as unknown) === '__INVALID__') {
+      res.status(400).json({ error: 'Invalid email address' });
       return;
     }
-
-    // Validate secondary/tertiary email + phone types if they were explicitly provided.
     if (secondPhoneField.present && (secondPhoneField.value as unknown) === '__INVALID__') {
       res.status(400).json({ error: 'Invalid mobile number' });
       return;
@@ -161,6 +161,7 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const emailNorm = emailField.present ? normalizeEmail(emailField.value) : undefined;
     const secondPhoneNorm = secondPhoneField.present ? normalizePhone(secondPhoneField.value) : undefined;
     const thirdPhoneNorm = thirdPhoneField.present ? normalizePhone(thirdPhoneField.value) : undefined;
     const secondEmailNorm = secondEmailField.present ? normalizeEmail(secondEmailField.value) : undefined;
@@ -172,6 +173,10 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
     }
     if (thirdPhoneField.present && thirdPhoneNorm && !isValidMobile(thirdPhoneNorm)) {
       res.status(400).json({ error: 'Invalid mobile number' });
+      return;
+    }
+    if (emailField.present && emailNorm && !isValidEmail(emailNorm)) {
+      res.status(400).json({ error: 'Invalid email address' });
       return;
     }
     if (secondEmailField.present && secondEmailNorm && !isValidEmail(secondEmailNorm)) {
@@ -189,7 +194,7 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
     const currentThirdEmail = ((row.third_email as string | null) ?? '').trim().toLowerCase();
 
     const emailCandidates = [
-      currentEmail || null,
+      emailField.present ? (emailNorm ?? null) : (currentEmail || null),
       secondEmailField.present ? (secondEmailNorm ?? null) : (currentSecondEmail || null),
       thirdEmailField.present ? (thirdEmailNorm ?? null) : (currentThirdEmail || null),
     ].filter((x): x is string => !!x);
@@ -230,6 +235,13 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
       }
 
       // If secondary/tertiary values are being updated in the same request, enforce global uniqueness too.
+      if (emailField.present && emailNorm) {
+        const otherE1 = await findCustomerIdByEmailExcluding(emailNorm, uid);
+        if (otherE1) {
+          res.status(409).json({ error: 'This email is already registered.' });
+          return;
+        }
+      }
       if (secondPhoneField.present && secondPhoneNorm) {
         const other2 = await findCustomerIdByPhoneExcluding(secondPhoneNorm, uid);
         if (other2) {
@@ -285,6 +297,7 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
         postcode,
         country,
         phone: normalizedNew,
+        email: emailNorm,
         second_phone: secondPhoneNorm,
         third_phone: thirdPhoneNorm,
         second_email: secondEmailNorm,
@@ -295,6 +308,13 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
     }
 
     // Uniqueness across customers for secondary/tertiary fields when provided.
+    if (emailField.present && emailNorm) {
+      const other = await findCustomerIdByEmailExcluding(emailNorm, uid);
+      if (other) {
+        res.status(409).json({ error: 'This email is already registered.' });
+        return;
+      }
+    }
     if (secondPhoneField.present && secondPhoneNorm) {
       const other = await findCustomerIdByPhoneExcluding(secondPhoneNorm, uid);
       if (other) {
@@ -332,6 +352,7 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
       city,
       postcode,
       country,
+      email: emailNorm,
       second_phone: secondPhoneNorm,
       third_phone: thirdPhoneNorm,
       second_email: secondEmailNorm,
