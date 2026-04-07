@@ -83,7 +83,8 @@ export async function getCustomerByIdSafe(id: number) {
             membership_number,
             address_line1, address_line2, city, postcode, country, created_at,
             COALESCE(role, 'customer') AS role,
-            COALESCE(reward_points_balance, 0)::int AS reward_points_balance
+            COALESCE(reward_points_balance, 0)::int AS reward_points_balance,
+            COALESCE(reward_points_balance, 0)::int AS loyalty_credits
      FROM customers WHERE id = $1`,
     [id]
   );
