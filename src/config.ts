@@ -38,14 +38,22 @@ export const config = {
     apiKey: process.env.CLOUDINARY_API_KEY ?? '',
     apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
   },
-  // SMTP for order notifications (from bot@vorton.uk to orders@vorton.com)
+  // SMTP for staff order notifications (from bot@vorton.uk to EMAIL_TO)
   email: {
     host: process.env.EMAIL_HOST ?? '',
     port: parseInt(process.env.EMAIL_PORT ?? '587', 10),
     user: process.env.EMAIL_USER ?? process.env.EMAIL_FROM ?? '',
     pass: process.env.EMAIL_PASS ?? '',
     from: process.env.EMAIL_FROM ?? 'bot@vorton.uk',
-    to: process.env.EMAIL_TO ?? 'orders@vorton.com',
+    to: process.env.EMAIL_TO ?? 'orders@vorton.uk',
+  },
+  // SMTP for customer purchase confirmations (from orders@vorton.uk to customer emails)
+  customerEmail: {
+    host: process.env.CUSTOMER_EMAIL_HOST ?? '',
+    port: parseInt(process.env.CUSTOMER_EMAIL_PORT ?? '587', 10),
+    user: process.env.CUSTOMER_EMAIL_USER ?? process.env.CUSTOMER_EMAIL_FROM ?? '',
+    pass: process.env.CUSTOMER_EMAIL_PASS ?? '',
+    from: process.env.CUSTOMER_EMAIL_FROM ?? 'orders@vorton.uk',
   },
   // PostgreSQL (optional; used for customers/auth when set)
   database: {

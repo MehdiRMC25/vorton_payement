@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config';
+import { getCustomerByIdSafe } from './customerService';
 
 /** Order shape from orderService (formatOrderRow / getOrderById). */
 interface OrderForEmail {
@@ -50,8 +51,37 @@ function buildOrderEmailBody(order: OrderForEmail): string {
   return lines.join('\r\n');
 }
 
+function buildCustomerOrderEmailBody(order: OrderForEmail): string {
+  const items = order.items ?? [];
+  const lines: string[] = [
+    `Thank you for your purchase from Vorton.`,
+    '',
+    `Order: ${order.order_number ?? order.id ?? 'N/A'}`,
+    `Date: ${order.order_date ?? order.created_at ?? 'N/A'}`,
+    '',
+    '--- Items ---',
+  ];
+  items.forEach((item, i) => {
+    const name = item.name ?? 'Unknown';
+    const qty = item.quantity ?? 0;
+    const price = item.price ?? 0;
+    const color = item.sku_color ? ` (${item.sku_color})` : '';
+    const size = item.size ? ` / ${item.size}` : '';
+    // Storefront totals are in AZN in this backend
+    lines.push(`${i + 1}. ${name}${color}${size} — Qty: ${qty} × ${Number(price).toFixed(2)} AZN`);
+  });
+  lines.push('');
+  lines.push(`Total: ${Number(order.total_price ?? 0).toFixed(2)} AZN`);
+  if (order.delivery_due_date) {
+    lines.push(`Delivery due: ${order.delivery_due_date}`);
+  }
+  lines.push('');
+  lines.push('If you did not place this order, please contact support.');
+  return lines.join('\r\n');
+}
+
 /**
- * Send order notification to EMAIL_TO (orders@vorton.com).
+ * Send staff order notification to EMAIL_TO.
  * From: EMAIL_FROM (bot@vorton.uk). Requires EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS.
  */
 /**
@@ -89,7 +119,7 @@ export async function sendOrderNotification(order: OrderForEmail): Promise<boole
   try {
     await transporter.sendMail({
       from: from || user,
-      to: to || 'orders@vorton.com',
+      to: to || 'orders@vorton.uk',
       subject: `[Vorton] New Order ${order.order_number ?? order.id ?? ''}`,
       text: buildOrderEmailBody(order),
     });
@@ -97,6 +127,43 @@ export async function sendOrderNotification(order: OrderForEmail): Promise<boole
     return true;
   } catch (err) {
     console.error('[Email] Order notification failed:', err);
+    return false;
+  }
+}
+
+/** Send purchase confirmation to customer emails on their account (from orders@vorton.uk). */
+export async function sendCustomerPurchaseConfirmation(order: OrderForEmail): Promise<boolean> {
+  const customerId =
+    typeof order.customer_id === 'number' && Number.isFinite(order.customer_id) ? order.customer_id : null;
+  if (!customerId) return false;
+
+  const u = await getCustomerByIdSafe(customerId);
+  const emails = [u?.email, u?.second_email, u?.third_email]
+    .map((e) => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+    .filter((e) => Boolean(e));
+  const unique = Array.from(new Set(emails));
+  if (unique.length === 0) return false;
+
+  const { host, port, user, pass, from } = config.customerEmail;
+  if (!host || !user || !pass) {
+    console.warn(
+      '[Email] Skipping customer purchase confirmation: CUSTOMER_EMAIL_HOST, CUSTOMER_EMAIL_USER, CUSTOMER_EMAIL_PASS not configured'
+    );
+    return false;
+  }
+
+  const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+  try {
+    await transporter.sendMail({
+      from: from || user,
+      to: unique.join(', '),
+      subject: `Vorton order confirmation ${order.order_number ?? ''}`.trim(),
+      text: buildCustomerOrderEmailBody(order),
+    });
+    console.log('[Email] Customer confirmation sent to', unique.join(', '));
+    return true;
+  } catch (err) {
+    console.error('[Email] Customer confirmation failed:', err);
     return false;
   }
 }

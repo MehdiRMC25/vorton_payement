@@ -13,7 +13,7 @@ import { assertPaymentAmountMatchesOrder } from '../services/paymentOrderValidat
 import { getTransactionDetails } from '../services/kapitalService';
 import * as orderService from '../services/orderService';
 import { tryAwardRewardPointsForOrder } from '../services/rewardPointsService';
-import { sendOrderNotification } from '../services/emailService';
+import { sendCustomerPurchaseConfirmation, sendOrderNotification } from '../services/emailService';
 import { emitOrderCreated } from '../socket';
 import { linkDeliveryLogToOrder } from '../services/deliveryContactLogService';
 
@@ -137,6 +137,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
           createdOrder = refreshed ?? order;
           emitOrderCreated(createdOrder);
           void sendOrderNotification(createdOrder);
+          void sendCustomerPurchaseConfirmation(createdOrder);
         }
         console.log('[Payment] Order created:', result.order_number);
       }
