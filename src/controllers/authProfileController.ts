@@ -13,11 +13,13 @@ import {
 import { recalculateCustomerMembership, getCustomerMembership } from '../services/membershipService';
 import { sendEmailChangeCode } from '../services/emailService';
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+/** Strict ASCII-only email: local@domain.tld (no spaces / no Unicode). */
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
-function isValidEmail(email: string): boolean {
+function isValidAsciiEmail(email: string): boolean {
   if (!email || email.length > 150) return false;
-  return EMAIL_REGEX.test(email.trim());
+  if (/[^\x00-\x7F]/.test(email)) return false;
+  return EMAIL_RE.test(email.trim());
 }
 
 function isValidMobile(phone: string): boolean {
@@ -175,16 +177,16 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
       res.status(400).json({ error: 'Invalid mobile number' });
       return;
     }
-    if (emailField.present && emailNorm && !isValidEmail(emailNorm)) {
-      res.status(400).json({ error: 'Invalid email address' });
+    if (emailField.present && emailNorm && !isValidAsciiEmail(emailNorm)) {
+      res.status(400).json({ error: 'Invalid email address (ASCII only).' });
       return;
     }
-    if (secondEmailField.present && secondEmailNorm && !isValidEmail(secondEmailNorm)) {
-      res.status(400).json({ error: 'Invalid email address' });
+    if (secondEmailField.present && secondEmailNorm && !isValidAsciiEmail(secondEmailNorm)) {
+      res.status(400).json({ error: 'Invalid email address (ASCII only).' });
       return;
     }
-    if (thirdEmailField.present && thirdEmailNorm && !isValidEmail(thirdEmailNorm)) {
-      res.status(400).json({ error: 'Invalid email address' });
+    if (thirdEmailField.present && thirdEmailNorm && !isValidAsciiEmail(thirdEmailNorm)) {
+      res.status(400).json({ error: 'Invalid email address (ASCII only).' });
       return;
     }
 
@@ -378,8 +380,8 @@ export async function requestEmailChangeCode(req: Request, res: Response): Promi
   try {
     const body = req.body as Record<string, unknown>;
     const newEmail = pickString(body, ['new_email', 'newEmail', 'email']) ?? '';
-    if (!isValidEmail(newEmail)) {
-      res.status(400).json({ error: 'Invalid email address' });
+    if (!isValidAsciiEmail(newEmail)) {
+      res.status(400).json({ error: 'Invalid email address (ASCII only).' });
       return;
     }
     const row = await getCustomerRowById(uid);
@@ -437,7 +439,7 @@ export async function confirmEmailChange(req: Request, res: Response): Promise<v
     const body = req.body as Record<string, unknown>;
     const newEmail = pickString(body, ['new_email', 'newEmail', 'email']) ?? '';
     const code = typeof body.code === 'string' ? body.code.trim() : '';
-    if (!isValidEmail(newEmail) || !code) {
+    if (!isValidAsciiEmail(newEmail) || !code) {
       res.status(400).json({ error: 'Invalid email or code.' });
       return;
     }

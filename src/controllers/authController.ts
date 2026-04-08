@@ -12,12 +12,14 @@ import { assignSilverToNewCustomer, recalculateCustomerMembership, getCustomerMe
 
 const SALT_ROUNDS = 10;
 
-/** Format: local@domain.tld — domain must have a TLD of 2+ letters. No error when email is omitted (optional). */
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+/** Strict ASCII-only email: local@domain.tld (no spaces / no Unicode). */
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
-function isValidEmail(email: string): boolean {
+function isValidAsciiEmail(email: string): boolean {
   if (!email || email.length > 150) return false;
-  return EMAIL_REGEX.test(email.trim());
+  // Reject any non-ASCII characters explicitly.
+  if (/[^\x00-\x7F]/.test(email)) return false;
+  return EMAIL_RE.test(email.trim());
 }
 
 function isValidMobile(phone: string): boolean {
@@ -39,6 +41,14 @@ function pickString(body: Record<string, unknown>, keys: string[]): string | nul
     if (typeof value === 'string' && value.trim()) {
       return value.trim();
     }
+  }
+  return null;
+}
+
+function pickTrimmedStringAllowEmpty(body: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = body[key];
+    if (typeof value === 'string') return value.trim();
   }
   return null;
 }
@@ -77,7 +87,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
     const addressLine1 = pickString(body, ['address_line1', 'addressLine1']);
     const addressLine2 = pickString(body, ['address_line2', 'addressLine2']);
     const address = pickString(body, ['address']);
-    const city = pickString(body, ['city']);
+    const city = pickTrimmedStringAllowEmpty(body, ['city']);
     const postcode = pickString(body, ['postcode', 'postal_code', 'postalCode', 'zip', 'zipCode']);
     const country = pickString(body, ['country']);
 
@@ -89,16 +99,16 @@ export async function signup(req: Request, res: Response): Promise<void> {
       res.status(400).json({ error: 'Invalid mobile number' });
       return;
     }
-    if (email && !isValidEmail(email)) {
-      res.status(400).json({ error: 'Invalid email address' });
+    if (email && !isValidAsciiEmail(email)) {
+      res.status(400).json({ error: 'Invalid email address (ASCII only).' });
       return;
     }
-    if (secondEmail && !isValidEmail(secondEmail)) {
-      res.status(400).json({ error: 'Invalid email address' });
+    if (secondEmail && !isValidAsciiEmail(secondEmail)) {
+      res.status(400).json({ error: 'Invalid email address (ASCII only).' });
       return;
     }
-    if (thirdEmail && !isValidEmail(thirdEmail)) {
-      res.status(400).json({ error: 'Invalid email address' });
+    if (thirdEmail && !isValidAsciiEmail(thirdEmail)) {
+      res.status(400).json({ error: 'Invalid email address (ASCII only).' });
       return;
     }
     if (secondPhone && !isValidMobile(secondPhone)) {
@@ -232,8 +242,8 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
     if (loginId.includes('@')) {
-      if (!isValidEmail(loginId)) {
-        res.status(400).json({ error: 'Invalid email address' });
+      if (!isValidAsciiEmail(loginId)) {
+        res.status(400).json({ error: 'Invalid email address (ASCII only).' });
         return;
       }
     } else {
