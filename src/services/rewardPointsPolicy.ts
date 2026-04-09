@@ -107,6 +107,42 @@ export function merchandiseGrossAznFromItems(
   return Math.round(sum * 100) / 100;
 }
 
+/** True if line represents delivery/shipping fee. */
+export function isShippingLine(item: { product_id?: unknown }): boolean {
+  return typeof item?.product_id === 'string' && item.product_id === '__delivery__';
+}
+
+/** Shipping subtotal in AZN from items (sum of delivery lines). */
+export function shippingFeeAznFromItems(
+  items: Array<{ quantity: unknown; price: unknown; product_id?: unknown }>
+): number {
+  let sum = 0;
+  for (const it of items || []) {
+    if (!isShippingLine(it)) continue;
+    const qty = Number(it.quantity) || 0;
+    const price = Number(it.price) || 0;
+    sum += qty * price;
+  }
+  return Math.round(sum * 100) / 100;
+}
+
+/**
+ * Merchandise subtotal excluding shipping in AZN.
+ * Includes discounted/promotional merchandise; only excludes shipping lines.
+ */
+export function merchandiseSubtotalExclShippingAznFromItems(
+  items: Array<{ quantity: unknown; price: unknown; product_id?: unknown }>
+): number {
+  let sum = 0;
+  for (const it of items || []) {
+    if (isShippingLine(it)) continue;
+    const qty = Number(it.quantity) || 0;
+    const price = Number(it.price) || 0;
+    sum += qty * price;
+  }
+  return Math.round(sum * 100) / 100;
+}
+
 /** AZN discount value when redeeming points (11 points = 1 USD, converted to AZN by FX). */
 export function discountAznFromRedeemPoints(points: number): number {
   if (points <= 0) return 0;
@@ -114,32 +150,39 @@ export function discountAznFromRedeemPoints(points: number): number {
   return Math.round(aznFromUsd(usd) * 100) / 100;
 }
 
-/** Max whole points that can be redeemed: balance cap and % of merchandise gross cap. */
-export function maxRedeemablePoints(eligibleSubtotalAzn: number, balancePoints: number): number {
-  if (eligibleSubtotalAzn <= 0 || balancePoints <= 0) return 0;
-  // Policy: points can only be redeemed against eligible (non-discounted, non-service) items.
-  const maxDisc = Math.round(eligibleSubtotalAzn * (REDEMPTION_MAX_PERCENT_HIGH / 100) * 100) / 100;
-  const cap = Math.min(maxDisc, eligibleSubtotalAzn);
+/**
+ * Max whole points that can be redeemed:
+ * - cap is 50% of merchandise subtotal excluding shipping (discounted/promotional included)
+ * - cannot exceed available balance
+ */
+export function maxRedeemablePoints(redemptionBaseAzn: number, balancePoints: number): number {
+  if (redemptionBaseAzn <= 0 || balancePoints <= 0) return 0;
+  const maxDisc = Math.round(redemptionBaseAzn * (REDEMPTION_MAX_PERCENT_HIGH / 100) * 100) / 100;
+  const cap = Math.min(maxDisc, redemptionBaseAzn);
   const capUsd = usdFromAzn(cap);
   let p = Math.min(balancePoints, Math.ceil(capUsd * POINTS_PER_USD));
   while (p > 0 && discountAznFromRedeemPoints(p) > cap + 0.001) p -= 1;
-  while (p > 0 && discountAznFromRedeemPoints(p) > eligibleSubtotalAzn + 0.001) p -= 1;
+  while (p > 0 && discountAznFromRedeemPoints(p) > redemptionBaseAzn + 0.001) p -= 1;
   return p;
 }
 
 export function validateRedemptionRequest(
   pointsRequested: number,
-  eligibleSubtotalAzn: number,
+  redemptionBaseAzn: number,
   balancePoints: number
 ): { ok: true; points: number; discountAzn: number } | { ok: false; error: string } {
   const p = Math.floor(pointsRequested);
   if (p <= 0) return { ok: false, error: 'points_to_redeem must be a positive integer' };
   if (p > balancePoints) return { ok: false, error: 'Insufficient reward points balance' };
-  const maxP = maxRedeemablePoints(eligibleSubtotalAzn, balancePoints);
+  const maxP = maxRedeemablePoints(redemptionBaseAzn, balancePoints);
   if (p > maxP) return { ok: false, error: 'points_to_redeem exceeds maximum allowed for this order' };
   const discountAzn = discountAznFromRedeemPoints(p);
-  if (discountAzn > eligibleSubtotalAzn + 0.001) {
-    return { ok: false, error: 'Points discount cannot exceed eligible merchandise total' };
+  const cap = Math.round(redemptionBaseAzn * (REDEMPTION_MAX_PERCENT_HIGH / 100) * 100) / 100;
+  if (discountAzn > cap + 0.001) {
+    return { ok: false, error: 'points_to_redeem exceeds 50% cap for this order' };
+  }
+  if (discountAzn > redemptionBaseAzn + 0.001) {
+    return { ok: false, error: 'Points discount cannot exceed merchandise subtotal (excl. shipping)' };
   }
   return { ok: true, points: p, discountAzn };
 }

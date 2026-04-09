@@ -2,8 +2,8 @@ import type { PoolClient } from 'pg';
 import { pool } from '../db';
 import { getCustomerMembership } from './membershipService';
 import {
-  merchandiseGrossAznFromItems,
-  computeEligibleSubtotalAzn,
+  merchandiseSubtotalExclShippingAznFromItems,
+  shippingFeeAznFromItems,
   validateRedemptionRequest,
 } from './rewardPointsPolicy';
 
@@ -102,20 +102,10 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
   }
 
   const order_number = generateOrderNumber();
-  const gross = merchandiseGrossAznFromItems(input.items || []);
+  const baseAzn = merchandiseSubtotalExclShippingAznFromItems(input.items || []);
+  const shippingAzn = shippingFeeAznFromItems(input.items || []);
+  const gross = Math.round((baseAzn + shippingAzn) * 100) / 100;
   const ptsReq = Math.max(0, Math.floor(Number(input.points_to_redeem) || 0));
-  // Points can only be redeemed against eligible (non-discounted, non-service) lines.
-  const eligibleSubtotalAzn = computeEligibleSubtotalAzn(
-    (input.items || []).map((it) => ({
-      quantity: it.quantity,
-      price: Number(it.price) || 0,
-      is_discounted: it.is_discounted === true || (typeof it.is_discounted === 'string' && it.is_discounted === 'true'),
-      promotional:
-        it.promotional === true ||
-        (typeof it.promotional === 'string' && it.promotional === 'true') ||
-        (typeof it.product_id === 'string' && it.product_id === '__delivery__'),
-    }))
-  );
 
   const client = await pool.connect();
   try {
@@ -141,7 +131,8 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
         throw new Error('Customer not found for points redemption');
       }
       const balance = Number(balRes.rows[0].b) || 0;
-      const v = validateRedemptionRequest(ptsReq, eligibleSubtotalAzn, balance);
+      // Redemption applies to merchandise total excluding shipping (discounted/promotional included).
+      const v = validateRedemptionRequest(ptsReq, baseAzn, balance);
       if (!v.ok) {
         throw new Error(v.error);
       }
@@ -150,9 +141,9 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
       newBalance = balance - pointsRedeemed;
     }
 
-    const net = Math.round((gross - discountAzn) * 100) / 100;
+    const net = Math.round(((baseAzn - discountAzn) + shippingAzn) * 100) / 100;
     if (Math.abs(net - Number(input.total_price)) > 0.02) {
-      throw new Error('total_price must equal merchandise total minus points discount');
+      throw new Error('total_price must equal (merchandise excl. shipping minus points discount) plus shipping');
     }
 
     const row = await insertOrderRow(client, {
