@@ -1,36 +1,40 @@
 import type { PendingOrderPayload } from './paymentService';
 import type { OrderItem } from './orderService';
 import {
-  discountAznFromRedeemPoints,
-  merchandiseSubtotalExclShippingAznFromItems,
-  shippingFeeAznFromItems,
-} from './rewardPointsPolicy';
+  CHECKOUT_AMOUNT_EPS,
+  computeCheckoutBreakdownForPaymentOrder,
+  mismatchPayload,
+  type CheckoutBreakdown,
+} from './checkoutTotalsService';
 
-const EPS = 0.03;
+export type { CheckoutBreakdown };
 
 /**
- * Ensures the bank charge matches merchandise total, or merchandise minus points discount.
- * Uses sum(items) as gross — do not trust client-only totals.
+ * Authoritative validation: recomputes membership, points, shipping from order payload + DB.
+ * Returns breakdown on success; throws Error with message on validation failure.
  */
-export function assertPaymentAmountMatchesOrder(amount: number, order: PendingOrderPayload): void {
-  const base = merchandiseSubtotalExclShippingAznFromItems((order.items || []) as OrderItem[]);
-  const shipping = shippingFeeAznFromItems((order.items || []) as OrderItem[]);
-  const gross = Math.round((base + shipping) * 100) / 100;
-  const pts = Math.floor(Number(order.points_to_redeem) || 0);
-  if (pts < 0) {
-    throw new Error('Invalid points_to_redeem');
+export async function validatePaymentAmountForOrder(
+  amount: number,
+  order: PendingOrderPayload
+): Promise<CheckoutBreakdown> {
+  const breakdown = await computeCheckoutBreakdownForPaymentOrder({
+    customer_id: order.customer_id,
+    items: (order.items || []) as OrderItem[],
+    points_to_redeem: order.points_to_redeem,
+  });
+  if (Math.abs(Number(amount) - breakdown.payableTotalAzn) > CHECKOUT_AMOUNT_EPS) {
+    const err = new Error('PAYMENT_AMOUNT_MISMATCH') as Error & { payload?: Record<string, unknown> };
+    err.payload = mismatchPayload(amount, breakdown, order.total_price);
+    throw err;
   }
-  if (pts > 0 && (order.customer_id == null || !Number.isFinite(Number(order.customer_id)))) {
-    throw new Error('customer_id is required when redeeming reward points');
+  if (
+    order.total_price != null &&
+    Number.isFinite(Number(order.total_price)) &&
+    Math.abs(Number(order.total_price) - breakdown.payableTotalAzn) > CHECKOUT_AMOUNT_EPS
+  ) {
+    const err = new Error('ORDER_TOTAL_PRICE_MISMATCH') as Error & { payload?: Record<string, unknown> };
+    err.payload = mismatchPayload(amount, breakdown, order.total_price);
+    throw err;
   }
-  const discount = discountAznFromRedeemPoints(pts);
-  const net = Math.round(((base - discount) + shipping) * 100) / 100;
-  const expected = pts > 0 ? net : gross;
-  if (Math.abs(Number(amount) - expected) > EPS) {
-    throw new Error(
-      pts > 0
-        ? 'Payment amount must equal (merchandise excl. shipping minus reward points discount) plus shipping'
-        : 'Payment amount must match merchandise total'
-    );
-  }
+  return breakdown;
 }

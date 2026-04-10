@@ -11,6 +11,7 @@ import { healthRouter } from './routes/health';
 import { authRouter } from './routes/auth';
 import { ordersRouter } from './routes/orders';
 import { productsRouter } from './routes/products';
+import { checkoutRouter } from './routes/checkout';
 import { setIO } from './socket';
 import { syncStaffAccounts } from './services/staffAccountsService';
 import * as authController from './controllers/authController';
@@ -30,6 +31,7 @@ app.use(config.apiPrefix + '/health', healthRouter);
 app.use(config.apiPrefix + '/payments', paymentRouter);
 app.use(config.apiPrefix + '/webhooks', webhookRouter);
 app.use(config.apiPrefix + '/auth', authRouter);
+app.use(config.apiPrefix + '/checkout', checkoutRouter);
 app.use(config.apiPrefix + '/orders', ordersRouter);
 app.use('/api', productsRouter);
 app.post('/auth/signup', authController.signup);
@@ -104,6 +106,9 @@ async function start(): Promise<void> {
       );
       await poolReward.query(
         'ALTER TABLE orders ADD COLUMN IF NOT EXISTS reward_discount_azn NUMERIC(12,2) NOT NULL DEFAULT 0'
+      );
+      await poolReward.query(
+        'ALTER TABLE orders ADD COLUMN IF NOT EXISTS membership_discount_azn NUMERIC(12,2) NOT NULL DEFAULT 0'
       );
       await poolReward.query(`
         CREATE TABLE IF NOT EXISTS reward_points_ledger (

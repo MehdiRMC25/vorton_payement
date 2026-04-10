@@ -9,7 +9,7 @@ import {
   persistOrderIdForPayment,
   type PendingOrderPayload,
 } from '../services/paymentService';
-import { assertPaymentAmountMatchesOrder } from '../services/paymentOrderValidation';
+import { validatePaymentAmountForOrder } from '../services/paymentOrderValidation';
 import { getTransactionDetails } from '../services/kapitalService';
 import * as orderService from '../services/orderService';
 import { tryAwardRewardPointsForOrder } from '../services/rewardPointsService';
@@ -35,8 +35,13 @@ export async function create(req: Request, res: Response): Promise<void> {
     console.log('[Payment] Create request: hasOrder=', hasOrder);
     if (hasOrder) {
       try {
-        assertPaymentAmountMatchesOrder(Number(body.amount), body.order as PendingOrderPayload);
+        await validatePaymentAmountForOrder(Number(body.amount), body.order as PendingOrderPayload);
       } catch (ve) {
+        const payload = (ve as Error & { payload?: Record<string, unknown> }).payload;
+        if (payload && typeof payload === 'object') {
+          res.status(400).json(payload);
+          return;
+        }
         const msg = ve instanceof Error ? ve.message : 'Invalid payment amount for order';
         res.status(400).json({ error: msg });
         return;
@@ -96,7 +101,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
       } else {
         const p = updated.orderPayload;
         try {
-          assertPaymentAmountMatchesOrder(updated.amount, p);
+          await validatePaymentAmountForOrder(updated.amount, p);
         } catch (ve) {
           console.error('[Payment] Amount/order mismatch on confirm:', ve);
           throw ve;
