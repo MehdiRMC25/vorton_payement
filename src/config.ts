@@ -3,6 +3,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+function envFloat(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
@@ -63,5 +70,20 @@ export const config = {
     user: process.env.PGUSER ?? 'postgres',
     password: process.env.PGPASSWORD ?? '',
     database: process.env.PGDATABASE ?? 'Vorton',
+  },
+  /** Shipping: edit JSON files + optional env overrides; restart server to apply. */
+  shipping: {
+    internationalFeesFile:
+      process.env.INTERNATIONAL_SHIPPING_FEES_FILE ?? path.join(process.cwd(), 'config', 'international-shipping-fees.json'),
+    countryAliasesFile:
+      process.env.SHIPPING_COUNTRY_ALIASES_FILE ?? path.join(process.cwd(), 'config', 'shipping-country-aliases.json'),
+    /** Domestic & international USD → AZN settlement (Kapital). */
+    aznPerUsd: envFloat('SHIPPING_AZN_PER_USD', 1.7),
+    /** Azerbaijan domestic: AZN ↔ GBP display (fee_azn / this). */
+    aznPerGbp: envFloat('SHIPPING_AZN_PER_GBP', 2.3),
+    /** International: USD → GBP display only (independent of aznPerUsd). */
+    gbpPerUsd: envFloat('SHIPPING_GBP_PER_USD', 0.7429),
+    bakuFeeAzn: envFloat('SHIPPING_BAKU_FEE_AZN', 5),
+    azOtherFeeAzn: envFloat('SHIPPING_AZ_OTHER_FEE_AZN', 10),
   },
 } as const;

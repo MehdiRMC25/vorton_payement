@@ -36,6 +36,10 @@ export interface CreateOrderInput {
   delivery_due_date?: string | null;
   /** Whole points to redeem; omit or 0 to pay full merchandise total. */
   points_to_redeem?: number;
+  /** With checkout_currency, shipping fee follows zone table; else from __delivery__ lines. */
+  delivery_city?: string | null;
+  delivery_country?: string | null;
+  checkout_currency?: string | null;
 }
 
 function generateOrderNumber(): string {
@@ -144,6 +148,11 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
       balancePoints,
       membershipCatalogFraction: membershipFraction,
       membershipLevelName: membershipResolvedName,
+      shipping: {
+        delivery_city: input.delivery_city,
+        delivery_country: input.delivery_country,
+        checkout_currency: input.checkout_currency,
+      },
     });
 
     pointsRedeemed = breakdown.pointsRedeemed;

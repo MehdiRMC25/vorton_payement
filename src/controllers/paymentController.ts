@@ -121,6 +121,9 @@ export async function confirm(req: Request, res: Response): Promise<void> {
           total_price: p.total_price,
           delivery_due_date: p.delivery_due_date ?? null,
           points_to_redeem: pts > 0 ? pts : undefined,
+          delivery_city: p.delivery_city ?? null,
+          delivery_country: p.delivery_country ?? null,
+          checkout_currency: p.checkout_currency ?? null,
         });
         const logId =
           typeof p.delivery_contact_log_id === 'number' && Number.isFinite(p.delivery_contact_log_id)

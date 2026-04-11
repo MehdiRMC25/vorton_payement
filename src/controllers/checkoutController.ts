@@ -17,6 +17,14 @@ function previewJson(breakdown: CheckoutBreakdown, extra: Record<string, unknown
       membershipDiscountAzn: breakdown.membershipDiscountAzn,
       merchandiseAfterMembershipAzn: breakdown.merchandiseAfterMembershipAzn,
       shippingAzn: breakdown.shippingAzn,
+      shippingSource: breakdown.shippingSource,
+      shippingZone: breakdown.shippingZone,
+      checkoutCurrencyResolved: breakdown.checkoutCurrencyResolved,
+      shippingInternationalFeeUsd: breakdown.shippingInternationalFeeUsd,
+      shippingDomesticFeeAzn: breakdown.shippingDomesticFeeAzn,
+      shippingQuoteAmount: breakdown.shippingQuoteAmount,
+      shippingQuoteCurrency: breakdown.shippingQuoteCurrency,
+      shippingCountryIso2: breakdown.shippingCountryIso2,
       pointsRedeemed: breakdown.pointsRedeemed,
       pointsDiscountAzn: breakdown.pointsDiscountAzn,
       payableTotalAzn: breakdown.payableTotalAzn,
@@ -24,6 +32,24 @@ function previewJson(breakdown: CheckoutBreakdown, extra: Record<string, unknown
       membershipCatalogFraction: breakdown.membershipCatalogFraction,
     },
   };
+}
+
+function shippingFromBody(body: Record<string, unknown>) {
+  const delivery_city =
+    body.delivery_city != null ? String(body.delivery_city) : body.deliveryCity != null ? String(body.deliveryCity) : null;
+  const delivery_country =
+    body.delivery_country != null
+      ? String(body.delivery_country)
+      : body.deliveryCountry != null
+        ? String(body.deliveryCountry)
+        : null;
+  const checkout_currency =
+    body.checkout_currency != null
+      ? String(body.checkout_currency)
+      : body.checkoutCurrency != null
+        ? String(body.checkoutCurrency)
+        : null;
+  return { delivery_city, delivery_country, checkout_currency };
 }
 
 /** POST /api/v1/checkout/preview — Bearer JWT. Same totals logic as payment create (for UI parity). */
@@ -34,8 +60,9 @@ export async function previewCheckout(req: Request, res: Response): Promise<void
     return;
   }
   try {
-    const body = req.body as { items?: unknown; points_to_redeem?: unknown };
+    const body = req.body as Record<string, unknown>;
     const items = Array.isArray(body.items) ? (body.items as OrderItem[]) : [];
+    const ship = shippingFromBody(body);
     const ptsRaw = body.points_to_redeem;
     const pts =
       ptsRaw != null && ptsRaw !== '' ? Math.max(0, Math.floor(Number(ptsRaw))) : 0;
@@ -57,10 +84,16 @@ export async function previewCheckout(req: Request, res: Response): Promise<void
       balancePoints,
       membershipCatalogFraction: fraction,
       membershipLevelName: levelName,
+      shipping: ship,
     });
 
     res.json(previewJson(breakdown, { audience: 'member' }));
   } catch (e) {
+    const typed = e as Error & { code?: string; payload?: Record<string, unknown> };
+    if (typed.code === 'SHIPPING_UNAVAILABLE' && typed.payload && typeof typed.payload === 'object') {
+      res.status(400).json(typed.payload);
+      return;
+    }
     const msg = e instanceof Error ? e.message : 'Checkout preview failed';
     res.status(400).json({ error: msg });
   }
@@ -72,8 +105,9 @@ export async function previewCheckout(req: Request, res: Response): Promise<void
  */
 export async function previewCheckoutGuest(req: Request, res: Response): Promise<void> {
   try {
-    const body = req.body as { items?: unknown; points_to_redeem?: unknown };
+    const body = req.body as Record<string, unknown>;
     const items = Array.isArray(body.items) ? (body.items as OrderItem[]) : [];
+    const ship = shippingFromBody(body);
     if (items.length === 0) {
       res.status(400).json({ error: 'items array is required' });
       return;
@@ -94,15 +128,21 @@ export async function previewCheckoutGuest(req: Request, res: Response): Promise
       balancePoints: 0,
       membershipCatalogFraction: 0,
       membershipLevelName: null,
+      shipping: ship,
     });
 
     res.json(
       previewJson(breakdown, {
         audience: 'guest',
-        note: 'No membership or points; payableTotalAzn is in AZN for payment/create.',
+        note: 'No membership or points; payableTotalAzn is in AZN for payment/create. Send delivery_country + checkout_currency for zone shipping.',
       })
     );
   } catch (e) {
+    const typed = e as Error & { code?: string; payload?: Record<string, unknown> };
+    if (typed.code === 'SHIPPING_UNAVAILABLE' && typed.payload && typeof typed.payload === 'object') {
+      res.status(400).json(typed.payload);
+      return;
+    }
     const msg = e instanceof Error ? e.message : 'Guest checkout preview failed';
     res.status(400).json({ error: msg });
   }

@@ -24,6 +24,10 @@ export interface PendingOrderPayload {
   points_to_redeem?: number;
   /** Row id from POST /auth/checkout-delivery — linked to the order after payment succeeds. */
   delivery_contact_log_id?: number;
+  /** Shipping zone policy: use with checkout_currency (AZN | USD | GBP). */
+  delivery_city?: string | null;
+  delivery_country?: string | null;
+  checkout_currency?: string | null;
 }
 
 export interface CreatePaymentInput {

@@ -5,7 +5,8 @@
 import { pool } from '../db';
 import type { OrderItem } from './orderService';
 import { getCustomerMembership } from './membershipService';
-import { isShippingLine, shippingFeeAznFromItems, validateRedemptionRequest } from './rewardPointsPolicy';
+import { isShippingLine, validateRedemptionRequest } from './rewardPointsPolicy';
+import { resolveShippingAmount, type ShippingZone, type CheckoutCurrency } from './shippingPolicy';
 
 export const CHECKOUT_AMOUNT_EPS = 0.03;
 
@@ -24,6 +25,18 @@ export interface CheckoutBreakdown {
   payableTotalAzn: number;
   membershipCatalogFraction: number;
   membershipLevelName: string | null;
+  /** When shipping came from delivery_country + checkout_currency policy (not summed from __delivery__ lines). */
+  shippingSource?: 'policy' | 'lines';
+  shippingZone?: ShippingZone | null;
+  checkoutCurrencyResolved?: CheckoutCurrency | null;
+  /** International row from config (USD). */
+  shippingInternationalFeeUsd?: number | null;
+  /** Azerbaijan domestic base in AZN (5 or 10). */
+  shippingDomesticFeeAzn?: number | null;
+  /** UI display amount for selected checkout currency (see shipping policy). */
+  shippingQuoteAmount?: number | null;
+  shippingQuoteCurrency?: CheckoutCurrency | null;
+  shippingCountryIso2?: string | null;
 }
 
 function round2(n: number): number {
@@ -127,6 +140,12 @@ export function computeCheckoutBreakdown(params: {
   balancePoints: number;
   membershipCatalogFraction: number;
   membershipLevelName?: string | null;
+  /** When country + checkout_currency are set, shipping uses zone table; else sums __delivery__ lines. */
+  shipping?: {
+    delivery_city?: string | null;
+    delivery_country?: string | null;
+    checkout_currency?: string | null;
+  } | null;
 }): CheckoutBreakdown {
   const items = params.items || [];
   let merchBefore = 0;
@@ -151,7 +170,22 @@ export function computeCheckoutBreakdown(params: {
   const membershipDiscountAzn = round2(eligibleForMembership * rate);
   const merchandiseAfterMembershipAzn = round2(merchBefore - membershipDiscountAzn);
 
-  const shippingAzn = shippingFeeAznFromItems(items);
+  const shipRes = resolveShippingAmount(items, params.shipping);
+  if (shipRes.source === 'unavailable') {
+    const err = new Error('Delivery to the selected country is not available.') as Error & {
+      code: string;
+      payload: Record<string, unknown>;
+    };
+    err.code = 'SHIPPING_UNAVAILABLE';
+    err.payload = {
+      code: 'SHIPPING_UNAVAILABLE',
+      error: 'Delivery to the selected country is not available.',
+      countryIso2: shipRes.countryIso2,
+      message: 'Delivery to your country is not available at this time.',
+    };
+    throw err;
+  }
+  const shippingAzn = shipRes.shippingAzn;
   const pts = Math.max(0, Math.floor(params.pointsRequested));
 
   let pointsRedeemed = 0;
@@ -178,6 +212,14 @@ export function computeCheckoutBreakdown(params: {
     payableTotalAzn,
     membershipCatalogFraction: rate,
     membershipLevelName: params.membershipLevelName ?? null,
+    shippingSource: shipRes.source,
+    shippingZone: shipRes.source === 'policy' ? shipRes.zone : null,
+    checkoutCurrencyResolved: shipRes.source === 'policy' ? shipRes.currency : null,
+    shippingInternationalFeeUsd: shipRes.source === 'policy' ? shipRes.internationalFeeUsd : null,
+    shippingDomesticFeeAzn: shipRes.source === 'policy' ? shipRes.domesticFeeAzn : null,
+    shippingQuoteAmount: shipRes.source === 'policy' ? shipRes.shippingQuoteAmount : null,
+    shippingQuoteCurrency: shipRes.source === 'policy' ? shipRes.shippingQuoteCurrency : null,
+    shippingCountryIso2: shipRes.source === 'policy' ? shipRes.countryIso2 : null,
   };
 }
 
@@ -185,6 +227,9 @@ export async function computeCheckoutBreakdownForPaymentOrder(order: {
   customer_id?: number;
   items: OrderItem[];
   points_to_redeem?: number;
+  delivery_city?: string | null;
+  delivery_country?: string | null;
+  checkout_currency?: string | null;
 }): Promise<CheckoutBreakdown> {
   const cid =
     order.customer_id != null && Number.isFinite(Number(order.customer_id)) ? Number(order.customer_id) : null;
@@ -207,6 +252,11 @@ export async function computeCheckoutBreakdownForPaymentOrder(order: {
     balancePoints,
     membershipCatalogFraction: fraction,
     membershipLevelName: levelName,
+    shipping: {
+      delivery_city: order.delivery_city,
+      delivery_country: order.delivery_country,
+      checkout_currency: order.checkout_currency,
+    },
   });
 }
 
@@ -228,6 +278,14 @@ export function mismatchPayload(
       membershipDiscountAzn: breakdown.membershipDiscountAzn,
       merchandiseAfterMembershipAzn: breakdown.merchandiseAfterMembershipAzn,
       shippingAzn: breakdown.shippingAzn,
+      shippingSource: breakdown.shippingSource,
+      shippingZone: breakdown.shippingZone,
+      checkoutCurrencyResolved: breakdown.checkoutCurrencyResolved,
+      shippingInternationalFeeUsd: breakdown.shippingInternationalFeeUsd,
+      shippingDomesticFeeAzn: breakdown.shippingDomesticFeeAzn,
+      shippingQuoteAmount: breakdown.shippingQuoteAmount,
+      shippingQuoteCurrency: breakdown.shippingQuoteCurrency,
+      shippingCountryIso2: breakdown.shippingCountryIso2,
       pointsDiscountAzn: breakdown.pointsDiscountAzn,
       pointsRedeemed: breakdown.pointsRedeemed,
       expectedPayableAzn: breakdown.payableTotalAzn,

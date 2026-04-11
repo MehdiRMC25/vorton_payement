@@ -21,6 +21,9 @@ export async function validatePaymentAmountForOrder(
     customer_id: order.customer_id,
     items: (order.items || []) as OrderItem[],
     points_to_redeem: order.points_to_redeem,
+    delivery_city: order.delivery_city,
+    delivery_country: order.delivery_country,
+    checkout_currency: order.checkout_currency,
   });
   if (Math.abs(Number(amount) - breakdown.payableTotalAzn) > CHECKOUT_AMOUNT_EPS) {
     const err = new Error('PAYMENT_AMOUNT_MISMATCH') as Error & { payload?: Record<string, unknown> };
