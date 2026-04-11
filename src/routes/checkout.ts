@@ -4,4 +4,5 @@ import * as checkoutController from '../controllers/checkoutController';
 
 export const checkoutRouter = Router();
 
+checkoutRouter.post('/preview-guest', checkoutController.previewCheckoutGuest);
 checkoutRouter.post('/preview', requireAuth, checkoutController.previewCheckout);
