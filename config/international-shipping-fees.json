@@ -659,7 +659,7 @@
       "name": "Nicaragua"
     },
     "NL": {
-      "feeUsd": null,
+      "feeUsd": 90,
       "name": "Netherlands, Kingdom of the"
     },
     "NO": {
