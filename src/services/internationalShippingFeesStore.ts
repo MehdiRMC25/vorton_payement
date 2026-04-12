@@ -3,7 +3,11 @@ import { config } from '../config';
 
 export interface InternationalFeesData {
   defaultFeeUsd: number;
+  /** Optional file-level default $/extra unit (overrides config.ts when set). */
+  defaultExtraUsdPerAdditionalUnit: number | null;
   feesByCountryCode: Record<string, number>;
+  /** ISO2 → explicit $/extra unit when set on that country row. */
+  extraUsdPerAdditionalUnitByCountry: Record<string, number>;
   /** ISO2 codes where feeUsd is null in JSON — delivery not offered. */
   unavailableCountryCodes: Set<string>;
   aliases: Record<string, string>;
@@ -23,11 +27,19 @@ function normalizeAliasKey(s: string): string {
     .normalize('NFKC');
 }
 
-type FeeEntry = number | { feeUsd: number | null; name?: string };
+type FeeEntry =
+  | number
+  | {
+      feeUsd: number | null;
+      name?: string;
+      /** Optional: USD per merchandise unit after the first; omit = file default or config.ts */
+      extraUsdPerAdditionalUnit?: number | null;
+    };
 
 type RawInternationalFeesFile = {
   defaultFeeUsd?: number;
-  /** Per ISO2: plain number (legacy) or { feeUsd, name } so each line shows code + price + label. */
+  /** Optional: default $/extra unit for all countries in this file (overrides config.ts). */
+  defaultExtraUsdPerAdditionalUnit?: number | null;
   feesByCountryCode?: Record<string, FeeEntry>;
   _readme?: string;
   aliases?: Record<string, string>;
@@ -36,10 +48,11 @@ type RawInternationalFeesFile = {
 function parseFeesByCountryCode(
   raw: Record<string, FeeEntry> | undefined,
   defaultFeeUsd: number
-): { fees: Record<string, number>; unavailable: Set<string> } {
+): { fees: Record<string, number>; unavailable: Set<string>; extraByCountry: Record<string, number> } {
   const fees: Record<string, number> = {};
   const unavailable = new Set<string>();
-  if (!raw) return { fees, unavailable };
+  const extraByCountry: Record<string, number> = {};
+  if (!raw) return { fees, unavailable, extraByCountry };
   for (const [code, val] of Object.entries(raw)) {
     const k = String(code).trim().toUpperCase();
     if (!k || k === 'AZ') continue;
@@ -48,16 +61,23 @@ function parseFeesByCountryCode(
       continue;
     }
     if (val && typeof val === 'object' && 'feeUsd' in val) {
-      const rawFee = (val as { feeUsd: number | null }).feeUsd;
+      const obj = val as { feeUsd: number | null; extraUsdPerAdditionalUnit?: number | null };
+      const rawFee = obj.feeUsd;
       if (rawFee === null) {
         unavailable.add(k);
         continue;
       }
       const n = Number(rawFee);
       fees[k] = Number.isFinite(n) && n >= 0 ? n : defaultFeeUsd;
+      if ('extraUsdPerAdditionalUnit' in obj && obj.extraUsdPerAdditionalUnit != null) {
+        const ex = Number(obj.extraUsdPerAdditionalUnit);
+        if (Number.isFinite(ex) && ex >= 0) {
+          extraByCountry[k] = ex;
+        }
+      }
     }
   }
-  return { fees, unavailable };
+  return { fees, unavailable, extraByCountry };
 }
 
 export function loadInternationalFeesData(): InternationalFeesData {
@@ -78,9 +98,15 @@ export function loadInternationalFeesData(): InternationalFeesData {
     merged[normalizeAliasKey(k)] = String(v).toUpperCase();
   }
   const parsed = parseFeesByCountryCode(data.feesByCountryCode, def);
+  const fileDefaultExtra =
+    data.defaultExtraUsdPerAdditionalUnit != null && Number.isFinite(Number(data.defaultExtraUsdPerAdditionalUnit))
+      ? Math.max(0, Number(data.defaultExtraUsdPerAdditionalUnit))
+      : null;
   cached = {
     defaultFeeUsd: def,
+    defaultExtraUsdPerAdditionalUnit: fileDefaultExtra,
     feesByCountryCode: parsed.fees,
+    extraUsdPerAdditionalUnitByCountry: parsed.extraByCountry,
     unavailableCountryCodes: parsed.unavailable,
     aliases: merged,
   };
@@ -107,6 +133,22 @@ export function getInternationalShippingFeeUsd(countryInput: string): {
     iso2: iso,
     available: true,
   };
+}
+
+/**
+ * USD per merchandise unit after the first (international only).
+ * Priority: country row → file defaultExtraUsdPerAdditionalUnit → config.shipping.intlExtraUsdPerAdditionalUnit
+ */
+export function resolveInternationalExtraUsdPerAdditionalUnit(iso2: string | null): number {
+  const globalDefault = config.shipping.intlExtraUsdPerAdditionalUnit;
+  const data = loadInternationalFeesData();
+  if (iso2 && Object.prototype.hasOwnProperty.call(data.extraUsdPerAdditionalUnitByCountry, iso2)) {
+    return data.extraUsdPerAdditionalUnitByCountry[iso2];
+  }
+  if (data.defaultExtraUsdPerAdditionalUnit != null && Number.isFinite(data.defaultExtraUsdPerAdditionalUnit)) {
+    return data.defaultExtraUsdPerAdditionalUnit;
+  }
+  return globalDefault;
 }
 
 function resolveCountryToIso2(countryInput: string, data: InternationalFeesData): string | null {

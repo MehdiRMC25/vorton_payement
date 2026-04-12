@@ -29,8 +29,13 @@ export interface CheckoutBreakdown {
   shippingSource?: 'policy' | 'lines';
   shippingZone?: ShippingZone | null;
   checkoutCurrencyResolved?: CheckoutCurrency | null;
-  /** International row from config (USD). */
+  /** International total shipping in USD (base + per-extra-unit surcharge). */
   shippingInternationalFeeUsd?: number | null;
+  shippingInternationalBaseFeeUsd?: number | null;
+  shippingInternationalSurchargeUsd?: number | null;
+  /** Resolved $/merchandise unit after first (international). */
+  shippingInternationalExtraUsdPerUnit?: number | null;
+  shippingMerchandiseUnits?: number | null;
   /** Azerbaijan domestic base in AZN (5 or 10). */
   shippingDomesticFeeAzn?: number | null;
   /** UI display amount for selected checkout currency (see shipping policy). */
@@ -216,6 +221,10 @@ export function computeCheckoutBreakdown(params: {
     shippingZone: shipRes.source === 'policy' ? shipRes.zone : null,
     checkoutCurrencyResolved: shipRes.source === 'policy' ? shipRes.currency : null,
     shippingInternationalFeeUsd: shipRes.source === 'policy' ? shipRes.internationalFeeUsd : null,
+    shippingInternationalBaseFeeUsd: shipRes.source === 'policy' ? shipRes.internationalBaseFeeUsd ?? null : null,
+    shippingInternationalSurchargeUsd: shipRes.source === 'policy' ? shipRes.internationalSurchargeUsd ?? null : null,
+    shippingInternationalExtraUsdPerUnit: shipRes.source === 'policy' ? shipRes.internationalExtraUsdPerUnit ?? null : null,
+    shippingMerchandiseUnits: shipRes.source === 'policy' ? shipRes.merchandiseUnits ?? null : null,
     shippingDomesticFeeAzn: shipRes.source === 'policy' ? shipRes.domesticFeeAzn : null,
     shippingQuoteAmount: shipRes.source === 'policy' ? shipRes.shippingQuoteAmount : null,
     shippingQuoteCurrency: shipRes.source === 'policy' ? shipRes.shippingQuoteCurrency : null,
@@ -282,6 +291,10 @@ export function mismatchPayload(
       shippingZone: breakdown.shippingZone,
       checkoutCurrencyResolved: breakdown.checkoutCurrencyResolved,
       shippingInternationalFeeUsd: breakdown.shippingInternationalFeeUsd,
+      shippingInternationalBaseFeeUsd: breakdown.shippingInternationalBaseFeeUsd,
+      shippingInternationalSurchargeUsd: breakdown.shippingInternationalSurchargeUsd,
+      shippingInternationalExtraUsdPerUnit: breakdown.shippingInternationalExtraUsdPerUnit,
+      shippingMerchandiseUnits: breakdown.shippingMerchandiseUnits,
       shippingDomesticFeeAzn: breakdown.shippingDomesticFeeAzn,
       shippingQuoteAmount: breakdown.shippingQuoteAmount,
       shippingQuoteCurrency: breakdown.shippingQuoteCurrency,

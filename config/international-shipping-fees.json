@@ -1,6 +1,7 @@
 {
-  "_readme": "Each entry: feeUsd in USD + name. Set feeUsd to null to disable delivery to that country. Restart server after edits.",
+  "_readme": "feeUsd = base shipping USD; name = label. feeUsd null = no delivery. Optional extraUsdPerAdditionalUnit = USD per extra merchandise unit after the first (omit = use defaultExtraUsdPerAdditionalUnit below or config.ts). Optional defaultExtraUsdPerAdditionalUnit = file-wide default for that surcharge. Restart server after edits.",
   "defaultFeeUsd": 50,
+  "defaultExtraUsdPerAdditionalUnit": 6,
   "feesByCountryCode": {
     "AD": {
       "feeUsd": null,
@@ -8,7 +9,8 @@
     },
     "AE": {
       "feeUsd": 50,
-      "name": "United Arab Emirates"
+      "name": "United Arab Emirates",
+      "extraUsdPerAdditionalUnit": 2
     },
     "AF": {
       "feeUsd": null,

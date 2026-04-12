@@ -10,6 +10,14 @@ function envFloat(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** Allows 0 (e.g. disable per-item international surcharge). */
+function envNonNegativeFloat(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '3000', 10),
@@ -85,5 +93,7 @@ export const config = {
     gbpPerUsd: envFloat('SHIPPING_GBP_PER_USD', 0.7429),
     bakuFeeAzn: envFloat('SHIPPING_BAKU_FEE_AZN', 5),
     azOtherFeeAzn: envFloat('SHIPPING_AZ_OTHER_FEE_AZN', 10),
+    /** International only: USD added for each merchandise unit after the first (sum of line qty, excl. __delivery__). */
+    intlExtraUsdPerAdditionalUnit: envNonNegativeFloat('SHIPPING_INTL_EXTRA_USD_PER_ADDITIONAL_ITEM', 6),
   },
 } as const;
