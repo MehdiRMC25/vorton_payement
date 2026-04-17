@@ -146,6 +146,18 @@ async function start(): Promise<void> {
           UNIQUE(customer_id)
         )
       `);
+
+      await poolProfile.query(`
+        CREATE TABLE IF NOT EXISTS email_verification_request_log (
+          id BIGSERIAL PRIMARY KEY,
+          customer_id INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+      `);
+      await poolProfile.query(
+          'CREATE INDEX IF NOT EXISTS idx_email_verify_req_customer_created ON email_verification_request_log (customer_id, created_at)'
+      );
+
       await poolProfile.query(`
         CREATE TABLE IF NOT EXISTS customer_delivery_contact_log (
           id SERIAL PRIMARY KEY,

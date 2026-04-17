@@ -168,6 +168,12 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
     const thirdPhoneNorm = thirdPhoneField.present ? normalizePhone(thirdPhoneField.value) : undefined;
     const secondEmailNorm = secondEmailField.present ? normalizeEmail(secondEmailField.value) : undefined;
     const thirdEmailNorm = thirdEmailField.present ? normalizeEmail(thirdEmailField.value) : undefined;
+    const emailChanged =
+        emailField.present && emailNorm !== ((row.email as string | null) ?? '').trim().toLowerCase();
+    const secondEmailChanged =
+        secondEmailField.present && secondEmailNorm !== ((row.second_email as string | null) ?? '').trim().toLowerCase();
+    const thirdEmailChanged =
+        thirdEmailField.present && thirdEmailNorm !== ((row.third_email as string | null) ?? '').trim().toLowerCase();
 
     if (secondPhoneField.present && secondPhoneNorm && !isValidMobile(secondPhoneNorm)) {
       res.status(400).json({ error: 'Invalid mobile number' });
@@ -305,11 +311,21 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
         second_email: secondEmailNorm,
         third_email: thirdEmailNorm,
       });
+      if (emailChanged || secondEmailChanged || thirdEmailChanged) {
+        const flags: string[] = [];
+        if (emailChanged) flags.push('email_verified = FALSE');
+        if (secondEmailChanged) flags.push('second_email_verified = FALSE');
+        if (thirdEmailChanged) flags.push('third_email_verified = FALSE');
+
+        if (flags.length > 0) {
+          await pool.query(`UPDATE customers SET ${flags.join(', ')} WHERE id = $1`, [uid]);
+        }
+      }
       await respondWithUser(req, res, uid);
       return;
     }
 
-    // Uniqueness across customers for secondary/tertiary fields when provided.
+     // Uniqueness across customers for secondary/tertiary fields when provided.
     if (emailField.present && emailNorm) {
       const other = await findCustomerIdByEmailExcluding(emailNorm, uid);
       if (other) {
@@ -360,6 +376,16 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
       second_email: secondEmailNorm,
       third_email: thirdEmailNorm,
     });
+    if (emailChanged || secondEmailChanged || thirdEmailChanged) {
+      const flags: string[] = [];
+      if (emailChanged) flags.push('email_verified = FALSE');
+      if (secondEmailChanged) flags.push('second_email_verified = FALSE');
+      if (thirdEmailChanged) flags.push('third_email_verified = FALSE');
+
+      if (flags.length > 0) {
+        await pool.query(`UPDATE customers SET ${flags.join(', ')} WHERE id = $1`, [uid]);
+      }
+    }
     await respondWithUser(req, res, uid);
   } catch (err) {
     console.error('patchProfile:', err);
@@ -369,38 +395,82 @@ export async function patchProfile(req: Request, res: Response): Promise<void> {
 
 const CODE_TTL_MIN = 15;
 const SALT_ROUNDS = 10;
+const EMAIL_CODE_COOLDOWN_MS = 30_000;
+const EMAIL_CODE_RATE_LIMIT_MAX = 10;
 
 /** POST /api/v1/auth/profile/email/request-code */
 export async function requestEmailChangeCode(req: Request, res: Response): Promise<void> {
   const uid = req.user?.id;
   if (uid == null) {
-    res.status(401).json({ error: 'Not authenticated.' });
+    res.status(401).json({ ok: false, code: "UNAUTHENTICATED", error: "Not authenticated." });
     return;
   }
   try {
     const body = req.body as Record<string, unknown>;
     const newEmail = pickString(body, ['new_email', 'newEmail', 'email']) ?? '';
     if (!isValidAsciiEmail(newEmail)) {
-      res.status(400).json({ error: 'Invalid email address (ASCII only).' });
+      res.status(400).json({ ok: false, code: "INVALID_EMAIL", error: "Invalid email address (ASCII only)." });
       return;
     }
     const row = await getCustomerRowById(uid);
     if (!row) {
-      res.status(404).json({ error: 'Account not found' });
+      res.status(404).json({ ok: false, code: "ACCOUNT_NOT_FOUND", error: "Account not found" });
       return;
     }
-    const currentEmail = (row.email as string | null)?.trim().toLowerCase() ?? '';
-    if (newEmail.trim().toLowerCase() === currentEmail) {
-      res.status(400).json({ error: 'New email must differ from current email.' });
-      return;
-    }
-    const taken = await findCustomerIdByEmailExcluding(newEmail, uid);
-    if (taken) {
-      res.status(409).json({ error: 'This email is already registered.' });
-      return;
+    const requestedEmail = newEmail.trim().toLowerCase();
+
+    const currentPrimaryEmail = (row.email as string | null)?.trim().toLowerCase() ?? '';
+    const currentSecondEmail = (row.second_email as string | null)?.trim().toLowerCase() ?? '';
+    const currentThirdEmail = (row.third_email as string | null)?.trim().toLowerCase() ?? '';
+
+    const matchesExistingEmail =
+        requestedEmail === currentPrimaryEmail ||
+        requestedEmail === currentSecondEmail ||
+        requestedEmail === currentThirdEmail;
+
+    if (!matchesExistingEmail) {
+      const taken = await findCustomerIdByEmailExcluding(requestedEmail, uid);
+      if (taken) {
+        res.status(409).json({ ok: false, code: "EMAIL_TAKEN", error: "This email is already registered." });
+        return;
+      }
     }
 
-    const code = String(crypto.randomInt(100000, 1000000));
+  const pendingCheck = await pool.query<{ created_at: Date }>(
+      `SELECT created_at FROM email_change_pending WHERE customer_id = $1`,
+      [uid]
+  );
+  const pendingCreatedAt = pendingCheck.rows[0]?.created_at;
+  if (pendingCreatedAt) {
+    const ageMs = Date.now() - new Date(pendingCreatedAt).getTime();
+    if (ageMs >= 0 && ageMs < EMAIL_CODE_COOLDOWN_MS) {
+      res.status(429).json({
+        ok: false,
+        code: "EMAIL_CODE_COOLDOWN",
+        error: "Please wait a bit before requesting another code.",
+      });
+      return;
+    }
+  }
+
+  const rl = await pool.query<{ c: number }>(
+      `SELECT COUNT(*)::int AS c
+       FROM email_verification_request_log
+       WHERE customer_id = $1
+         AND created_at > NOW() - INTERVAL '1 hour'`,
+      [uid]
+  );
+  const recentSends = rl.rows[0]?.c ?? 0;
+  if (recentSends >= EMAIL_CODE_RATE_LIMIT_MAX) {
+    res.status(429).json({
+      ok: false,
+      code: "EMAIL_CODE_RATE_LIMIT",
+      error: "Too many verification requests. Please try again later.",
+    });
+    return;
+  }
+
+  const code = String(crypto.randomInt(100000, 1000000));
     const code_hash = await bcrypt.hash(code, SALT_ROUNDS);
     const expiresAt = new Date(Date.now() + CODE_TTL_MIN * 60 * 1000);
 
@@ -411,20 +481,22 @@ export async function requestEmailChangeCode(req: Request, res: Response): Promi
     await pool.query(
       `INSERT INTO email_change_pending (customer_id, new_email, code_hash, expires_at)
        VALUES ($1, $2, $3, $4)`,
-      [uid, newEmail.trim().toLowerCase(), code_hash, expiresAt]
+      [uid, requestedEmail, code_hash, expiresAt]
     );
 
-    const sent = await sendEmailChangeCode(newEmail.trim(), code);
+    await pool.query(`INSERT INTO email_verification_request_log (customer_id) VALUES ($1)`, [uid]);
+
+    const sent = await sendEmailChangeCode(requestedEmail, code);
     if (!sent) {
       await pool.query(`DELETE FROM email_change_pending WHERE customer_id = $1`, [uid]);
-      res.status(503).json({ error: 'Email is not configured on the server. Cannot send verification code.' });
+      res.status(503).json({ ok: false, code: "EMAIL_DELIVERY_UNAVAILABLE", error: "Email is not configured on the server. Cannot send verification code." });
       return;
     }
 
-    res.json({ ok: true });
+    res.json({ ok: true, code: "EMAIL_CODE_SENT" });
   } catch (err) {
     console.error('requestEmailChangeCode:', err);
-    res.status(500).json({ error: 'Could not send verification code.' });
+    res.status(500).json({ ok: false, code: "EMAIL_CODE_SEND_FAILED", error: "Could not send verification code." });
   }
 }
 
@@ -432,15 +504,16 @@ export async function requestEmailChangeCode(req: Request, res: Response): Promi
 export async function confirmEmailChange(req: Request, res: Response): Promise<void> {
   const uid = req.user?.id;
   if (uid == null) {
-    res.status(401).json({ error: 'Not authenticated.' });
+    res.status(401).json({ ok: false, code: "UNAUTHENTICATED", error: "Not authenticated." });
     return;
   }
   try {
     const body = req.body as Record<string, unknown>;
-    const newEmail = pickString(body, ['new_email', 'newEmail', 'email']) ?? '';
+    const rawEmail = pickString(body, ['new_email', 'newEmail', 'email']) ?? '';
     const code = typeof body.code === 'string' ? body.code.trim() : '';
-    if (!isValidAsciiEmail(newEmail) || !code) {
-      res.status(400).json({ error: 'Invalid email or code.' });
+    const requestedEmail = rawEmail.trim().toLowerCase();
+    if (!isValidAsciiEmail(requestedEmail) || !code) {
+      res.status(400).json({ ok: false, code: "INVALID_EMAIL_OR_CODE", error: "Invalid email or code." });
       return;
     }
 
@@ -450,16 +523,16 @@ export async function confirmEmailChange(req: Request, res: Response): Promise<v
     );
     const pending = result.rows[0];
     if (!pending) {
-      res.status(400).json({ error: 'No pending email change. Request a new code.' });
+      res.status(400).json({ ok: false, code: "NO_PENDING_EMAIL_CHANGE", error: "No pending email change. Request a new code." });
       return;
     }
-    if (pending.new_email !== newEmail.trim().toLowerCase()) {
-      res.status(400).json({ error: 'Email does not match pending change.' });
+    if (pending.new_email !== requestedEmail) {
+      res.status(400).json({ ok: false, code: "PENDING_EMAIL_MISMATCH", error: "Email does not match pending change." });
       return;
     }
     if (new Date(pending.expires_at) < new Date()) {
       await pool.query(`DELETE FROM email_change_pending WHERE customer_id = $1`, [uid]);
-      res.status(400).json({ error: 'Code expired. Request a new code.' });
+      res.status(400).json({ ok: false, code: "EMAIL_CODE_EXPIRED", error: "Code expired. Request a new code." });
       return;
     }
     const ok = await bcrypt.compare(code, pending.code_hash);
@@ -468,17 +541,48 @@ export async function confirmEmailChange(req: Request, res: Response): Promise<v
       return;
     }
 
-    const taken = await findCustomerIdByEmailExcluding(newEmail, uid);
+    const taken = await findCustomerIdByEmailExcluding(requestedEmail, uid);
     if (taken) {
-      res.status(409).json({ error: 'This email is already registered.' });
+      res.status(409).json({ ok: false, code: "EMAIL_TAKEN", error: "This email is already registered." });
       return;
     }
 
-    await pool.query(`UPDATE customers SET email = $1 WHERE id = $2`, [newEmail.trim().toLowerCase(), uid]);
+    const profileRow = await getCustomerRowById(uid);
+    if (!profileRow) {
+      res.status(404).json({ ok: false, code: "ACCOUNT_NOT_FOUND", error: "Account not found" });
+      return;
+    }
+
+    const curPrimary = ((profileRow.email as string | null) ?? '').trim().toLowerCase();
+    const curSecond = ((profileRow.second_email as string | null) ?? '').trim().toLowerCase();
+    const curThird = ((profileRow.third_email as string | null) ?? '').trim().toLowerCase();
+
+    if (requestedEmail === curPrimary) {
+      await pool.query(
+          `UPDATE customers SET email = $1, email_verified = TRUE WHERE id = $2`,
+          [requestedEmail, uid]
+      );
+    } else if (requestedEmail === curSecond) {
+      await pool.query(
+          `UPDATE customers SET second_email_verified = TRUE WHERE id = $1`,
+          [uid]
+      );
+    } else if (requestedEmail === curThird) {
+      await pool.query(
+          `UPDATE customers SET third_email_verified = TRUE WHERE id = $1`,
+          [uid]
+      );
+    } else {
+      await pool.query(
+          `UPDATE customers SET email = $1, email_verified = TRUE WHERE id = $2`,
+          [requestedEmail, uid]
+      );
+    }
+
     await pool.query(`DELETE FROM email_change_pending WHERE customer_id = $1`, [uid]);
 
     const user = await getCustomerByIdSafe(uid);
-    res.json({ user, data: { user } });
+    res.json({ ok: true, code: "EMAIL_CONFIRMED", user, data: { user } });
   } catch (err) {
     console.error('confirmEmailChange:', err);
     res.status(500).json({ error: 'Could not confirm email change.' });

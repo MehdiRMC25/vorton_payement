@@ -2,6 +2,8 @@
 
 REST API for payments, usable by both your **mobile app** and **website**. One backend, one set of endpoints.
 
+**Full API & checkout design (shipping, preview, payments):** [docs/BACKEND.md](docs/BACKEND.md) — open in an editor or export to PDF/Word from Word or Google Docs.
+
 ## Quick start
 
 ```bash
