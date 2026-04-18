@@ -41,10 +41,10 @@ function buildOrderEmailBody(order: OrderForEmail): string {
     const price = item.price ?? 0;
     const color = item.sku_color ? ` (${item.sku_color})` : '';
     const size = item.size ? ` / ${item.size}` : '';
-    lines.push(`${i + 1}. ${name}${color}${size} — Qty: ${qty} × £${Number(price).toFixed(2)}`);
+    lines.push(`${i + 1}. ${name}${color}${size} — Qty: ${qty} × ${Number(price).toFixed(2)} AZN`);
   });
   lines.push('');
-  lines.push(`Total: £${Number(order.total_price ?? 0).toFixed(2)}`);
+  lines.push(`Total: ${Number(order.total_price ?? 0).toFixed(2)} AZN`);
   if (order.delivery_due_date) {
     lines.push(`Delivery due: ${order.delivery_due_date}`);
   }
@@ -81,8 +81,8 @@ function buildCustomerOrderEmailBody(order: OrderForEmail): string {
 }
 
 /**
- * Send staff order notification to EMAIL_TO.
- * From: EMAIL_FROM (bot@vorton.uk). Requires EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS.
+ * Outbound SMTP: staff order alerts (EMAIL_TO), customer purchase confirmations (To = account emails),
+ * and profile email verification codes — all use config.email (EMAIL_* / EMAIL_FROM, e.g. bot@vorton.uk).
  */
 /**
  * Send a one-time code to verify a new email address (profile change).
@@ -131,24 +131,22 @@ export async function sendOrderNotification(order: OrderForEmail): Promise<boole
   }
 }
 
-/** Send purchase confirmation to customer emails on their account (from orders@vorton.uk). */
+/** Send purchase confirmation to customer emails on their account (same SMTP as staff / OTP — EMAIL_*). */
 export async function sendCustomerPurchaseConfirmation(order: OrderForEmail): Promise<boolean> {
   const customerId =
-    typeof order.customer_id === 'number' && Number.isFinite(order.customer_id) ? order.customer_id : null;
+      typeof order.customer_id === 'number' && Number.isFinite(order.customer_id) ? order.customer_id : null;
   if (!customerId) return false;
 
   const u = await getCustomerByIdSafe(customerId);
   const emails = [u?.email, u?.second_email, u?.third_email]
-    .map((e) => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
-    .filter((e) => Boolean(e));
+      .map((e) => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+      .filter((e) => Boolean(e));
   const unique = Array.from(new Set(emails));
   if (unique.length === 0) return false;
 
-  const { host, port, user, pass, from } = config.customerEmail;
+  const { host, port, user, pass, from } = config.email;
   if (!host || !user || !pass) {
-    console.warn(
-      '[Email] Skipping customer purchase confirmation: CUSTOMER_EMAIL_HOST, CUSTOMER_EMAIL_USER, CUSTOMER_EMAIL_PASS not configured'
-    );
+    console.warn('[Email] Skipping customer purchase confirmation: EMAIL_HOST, EMAIL_USER, EMAIL_PASS not configured');
     return false;
   }
 
@@ -160,6 +158,7 @@ export async function sendCustomerPurchaseConfirmation(order: OrderForEmail): Pr
       subject: `Vorton order confirmation ${order.order_number ?? ''}`.trim(),
       text: buildCustomerOrderEmailBody(order),
     });
+
     console.log('[Email] Customer confirmation sent to', unique.join(', '));
     return true;
   } catch (err) {
