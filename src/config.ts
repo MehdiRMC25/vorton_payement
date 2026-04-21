@@ -53,14 +53,18 @@ export const config = {
     apiKey: process.env.CLOUDINARY_API_KEY ?? '',
     apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
   },
-  // SMTP: staff order alerts (EMAIL_TO), customer purchase confirmations (To = account emails), profile email OTP — all from EMAIL_FROM (e.g. bot@vorton.uk)
+  // SMTP shared transport; different From addresses by flow.
   email: {
     host: process.env.EMAIL_HOST ?? '',
     port: parseInt(process.env.EMAIL_PORT ?? '587', 10),
     user: process.env.EMAIL_USER ?? process.env.EMAIL_FROM ?? '',
     pass: process.env.EMAIL_PASS ?? '',
-    from: process.env.EMAIL_FROM ?? 'bot@vorton.uk',
-    to: process.env.EMAIL_TO ?? 'orders@vorton.uk',
+    // Orders/staff notifications sender (e.g. orders@vorton.uk)
+    fromOrders: process.env.EMAIL_FROM_ORDERS ?? process.env.EMAIL_FROM ?? 'orders@vorton.uk',
+    // OTP verification sender (e.g. noreply@vorton.uk)
+    fromOtp: process.env.EMAIL_FROM_OTP ?? process.env.EMAIL_FROM ?? 'noreply@vorton.uk',
+    // Staff recipients for new order alerts
+    to: process.env.EMAIL_TO ?? 'neworder@vorton.uk',
   },
   // PostgreSQL (optional; used for customers/auth when set)
   database: {

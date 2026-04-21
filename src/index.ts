@@ -15,6 +15,7 @@ import { checkoutRouter } from './routes/checkout';
 import { setIO } from './socket';
 import { syncStaffAccounts } from './services/staffAccountsService';
 import * as authController from './controllers/authController';
+import { downloadRouter } from './routes/download';
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use('/download', downloadRouter);
 
 app.use(config.apiPrefix + '/health', healthRouter);
 app.use(config.apiPrefix + '/payments', paymentRouter);

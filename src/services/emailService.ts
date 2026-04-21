@@ -88,7 +88,7 @@ function buildCustomerOrderEmailBody(order: OrderForEmail): string {
  * Send a one-time code to verify a new email address (profile change).
  */
 export async function sendEmailChangeCode(to: string, code: string): Promise<boolean> {
-  const { host, port, user, pass, from } = config.email;
+  const { host, port, user, pass, fromOtp } = config.email;
   if (!host || !user || !pass) {
     console.warn('[Email] Skipping email change code: EMAIL_HOST, EMAIL_USER, EMAIL_PASS not configured');
     return false;
@@ -96,7 +96,7 @@ export async function sendEmailChangeCode(to: string, code: string): Promise<boo
   const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
   try {
     await transporter.sendMail({
-      from: from || user,
+      from: fromOtp || user,
       to,
       subject: '[Vorton] Verify your new email address',
       text: `Your verification code is: ${code}\n\nThis code expires in 15 minutes. If you did not request this, you can ignore this email.`,
@@ -110,7 +110,7 @@ export async function sendEmailChangeCode(to: string, code: string): Promise<boo
 }
 
 export async function sendOrderNotification(order: OrderForEmail): Promise<boolean> {
-  const { host, port, user, pass, from, to } = config.email;
+  const { host, port, user, pass, fromOrders, to } = config.email;
   if (!host || !user || !pass) {
     console.warn('[Email] Skipping order notification: EMAIL_HOST, EMAIL_USER, EMAIL_PASS not configured');
     return false;
@@ -118,8 +118,8 @@ export async function sendOrderNotification(order: OrderForEmail): Promise<boole
   const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
   try {
     await transporter.sendMail({
-      from: from || user,
-      to: to || 'orders@vorton.uk',
+      from: fromOrders || user,
+      to: to || 'neworder@vorton.uk',
       subject: `[Vorton] New Order ${order.order_number ?? order.id ?? ''}`,
       text: buildOrderEmailBody(order),
     });
@@ -144,7 +144,7 @@ export async function sendCustomerPurchaseConfirmation(order: OrderForEmail): Pr
   const unique = Array.from(new Set(emails));
   if (unique.length === 0) return false;
 
-  const { host, port, user, pass, from } = config.email;
+  const { host, port, user, pass, fromOrders } = config.email;
   if (!host || !user || !pass) {
     console.warn('[Email] Skipping customer purchase confirmation: EMAIL_HOST, EMAIL_USER, EMAIL_PASS not configured');
     return false;
@@ -153,7 +153,7 @@ export async function sendCustomerPurchaseConfirmation(order: OrderForEmail): Pr
   const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
   try {
     await transporter.sendMail({
-      from: from || user,
+      from: fromOrders || user,
       to: unique.join(', '),
       subject: `Vorton order confirmation ${order.order_number ?? ''}`.trim(),
       text: buildCustomerOrderEmailBody(order),
