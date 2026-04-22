@@ -398,6 +398,22 @@ const SALT_ROUNDS = 10;
 const EMAIL_CODE_COOLDOWN_MS = 30_000;
 const EMAIL_CODE_RATE_LIMIT_MAX = 10;
 
+function sendThrottle(
+    res: Response,
+    payload: { code: 'EMAIL_CODE_COOLDOWN' | 'EMAIL_CODE_RATE_LIMIT'; message: string; retryAfterSec: number }
+): void {
+  const retryAfterSec = Math.max(1, Math.floor(payload.retryAfterSec));
+  res.setHeader('Retry-After', String(retryAfterSec));
+  res.status(429).json({
+    ok: false,
+    code: payload.code,
+    error: payload.message,
+    retry_after_seconds: retryAfterSec,
+    retry_after_ms: retryAfterSec * 1000,
+    server_time: new Date().toISOString(),
+  });
+}
+
 /** POST /api/v1/auth/profile/email/request-code */
 export async function requestEmailChangeCode(req: Request, res: Response): Promise<void> {
   const uid = req.user?.id;
@@ -436,39 +452,47 @@ export async function requestEmailChangeCode(req: Request, res: Response): Promi
       }
     }
 
-  const pendingCheck = await pool.query<{ created_at: Date }>(
-      `SELECT created_at FROM email_change_pending WHERE customer_id = $1`,
-      [uid]
-  );
-  const pendingCreatedAt = pendingCheck.rows[0]?.created_at;
-  if (pendingCreatedAt) {
-    const ageMs = Date.now() - new Date(pendingCreatedAt).getTime();
-    if (ageMs >= 0 && ageMs < EMAIL_CODE_COOLDOWN_MS) {
-      res.status(429).json({
-        ok: false,
-        code: "EMAIL_CODE_COOLDOWN",
-        error: "Please wait a bit before requesting another code.",
+    const pendingCheck = await pool.query<{ created_at: Date }>(
+        `SELECT created_at
+         FROM email_change_pending
+         WHERE customer_id = $1 AND new_email = $2`,
+        [uid, requestedEmail]
+    );
+    const pendingCreatedAt = pendingCheck.rows[0]?.created_at;
+    if (pendingCreatedAt) {
+      const ageMs = Date.now() - new Date(pendingCreatedAt).getTime();
+      if (ageMs >= 0 && ageMs < EMAIL_CODE_COOLDOWN_MS) {
+        const retryAfterSec = Math.ceil((EMAIL_CODE_COOLDOWN_MS - ageMs) / 1000);
+        sendThrottle(res, {
+          code: 'EMAIL_CODE_COOLDOWN',
+          message: 'Please wait a bit before requesting another code.',
+          retryAfterSec,
+        });
+        return;
+      }
+    }
+
+    const rl = await pool.query<{ c: number; oldest: Date | null }>(
+        `SELECT
+           COUNT(*)::int AS c,
+           MIN(created_at) AS oldest
+         FROM email_verification_request_log
+         WHERE customer_id = $1
+           AND created_at > NOW() - INTERVAL '1 hour'`,
+        [uid]
+    );
+    const recentSends = rl.rows[0]?.c ?? 0;
+    if (recentSends >= EMAIL_CODE_RATE_LIMIT_MAX) {
+      const oldest = rl.rows[0]?.oldest ? new Date(rl.rows[0].oldest) : new Date();
+      const nextAllowedMs = oldest.getTime() + 60 * 60 * 1000;
+      const retryAfterSec = Math.ceil(Math.max(1000, nextAllowedMs - Date.now()) / 1000);
+      sendThrottle(res, {
+        code: 'EMAIL_CODE_RATE_LIMIT',
+        message: 'Too many verification requests. Please try again later.',
+        retryAfterSec,
       });
       return;
     }
-  }
-
-  const rl = await pool.query<{ c: number }>(
-      `SELECT COUNT(*)::int AS c
-       FROM email_verification_request_log
-       WHERE customer_id = $1
-         AND created_at > NOW() - INTERVAL '1 hour'`,
-      [uid]
-  );
-  const recentSends = rl.rows[0]?.c ?? 0;
-  if (recentSends >= EMAIL_CODE_RATE_LIMIT_MAX) {
-    res.status(429).json({
-      ok: false,
-      code: "EMAIL_CODE_RATE_LIMIT",
-      error: "Too many verification requests. Please try again later.",
-    });
-    return;
-  }
 
   const code = String(crypto.randomInt(100000, 1000000));
     const code_hash = await bcrypt.hash(code, SALT_ROUNDS);
@@ -532,12 +556,20 @@ export async function confirmEmailChange(req: Request, res: Response): Promise<v
     }
     if (new Date(pending.expires_at) < new Date()) {
       await pool.query(`DELETE FROM email_change_pending WHERE customer_id = $1`, [uid]);
-      res.status(400).json({ ok: false, code: "EMAIL_CODE_EXPIRED", error: "Code expired. Request a new code." });
+      res.status(400).json({
+        ok: false,
+        code: "EMAIL_CODE_EXPIRED",
+        error: "Code expired. Request a new code.",
+      });
       return;
     }
     const ok = await bcrypt.compare(code, pending.code_hash);
     if (!ok) {
-      res.status(400).json({ error: 'Invalid verification code.' });
+      res.status(400).json({
+        ok: false,
+        code: 'INVALID_VERIFICATION_CODE',
+        error: 'Invalid verification code.',
+      });
       return;
     }
 
