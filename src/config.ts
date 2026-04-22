@@ -60,9 +60,13 @@ export const config = {
     user: process.env.EMAIL_USER ?? process.env.EMAIL_FROM ?? '',
     pass: process.env.EMAIL_PASS ?? '',
     // Orders/staff notifications sender (e.g. orders@vorton.uk)
-    fromOrders: process.env.EMAIL_FROM_ORDERS ?? process.env.EMAIL_FROM ?? 'orders@vorton.uk',
-    // OTP verification sender (e.g. noreply@vorton.uk)
-    fromOtp: process.env.EMAIL_FROM_OTP ?? process.env.EMAIL_FROM ?? 'noreply@vorton.uk',
+    fromOrders: process.env.EMAIL_FROM_ORDERS ?? process.env.EMAIL_FROM ?? "orders@vorton.uk",
+    // OTP verification sender. Fallback to orders sender to avoid hard failure if EMAIL_FROM_OTP is unset.
+    fromOtp:
+        process.env.EMAIL_FROM_OTP ??
+        process.env.EMAIL_FROM ??
+        process.env.EMAIL_FROM_ORDERS ??
+        "orders@vorton.uk",
     // Staff recipients for new order alerts
     to: process.env.EMAIL_TO ?? 'neworder@vorton.uk',
   },
