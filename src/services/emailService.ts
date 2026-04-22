@@ -88,10 +88,10 @@ function buildCustomerOrderEmailBody(order: OrderForEmail): string {
  * Send a one-time code to verify a new email address (profile change).
  */
 export async function sendEmailChangeCode(to: string, code: string): Promise<boolean> {
-  const { host, port, user, pass, fromOtp } = config.email;
-  const from = (fromOtp ?? '').trim();
+  const { host, port, user, pass, fromOtp, fromOrders } = config.email;
+  const from = (fromOtp || fromOrders || user || "").trim();
   if (!host || !user || !pass || !from) {
-    console.warn('[Email] Skipping email change code: EMAIL_HOST, EMAIL_USER, EMAIL_PASS, EMAIL_FROM_OTP not configured');
+    console.warn('[Email] Skipping email change code: EMAIL_HOST, EMAIL_USER, EMAIL_PASS, and sender (EMAIL_FROM_OTP/EMAIL_FROM_ORDERS/EMAIL_USER) must be configured');
     return false;
   }
   const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
