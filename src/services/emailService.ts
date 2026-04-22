@@ -89,8 +89,8 @@ function buildCustomerOrderEmailBody(order: OrderForEmail): string {
  */
 export async function sendEmailChangeCode(to: string, code: string): Promise<boolean> {
   const { host, port, user, pass, fromOtp, fromOrders } = config.email;
-  // Fallback chain prevents OTP outage if EMAIL_FROM_OTP is misconfigured.
-  const from = (fromOtp || fromOrders || user || "").trim();
+  // IMPORTANT: never fall back to SMTP username as From.
+  const from = (fromOtp || fromOrders || "").trim();
   if (!host || !user || !pass || !from) {
     console.warn(
         "[Email] Skipping email change code: EMAIL_HOST, EMAIL_USER, EMAIL_PASS, and sender (EMAIL_FROM_OTP/EMAIL_FROM_ORDERS/EMAIL_USER) must be configured"
