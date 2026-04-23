@@ -72,7 +72,7 @@ async function insertOrderRow(
       order_number, customer_id, customer_name, mobile, membership_level,
       address, items, total_price, delivery_due_date, status,
       points_redeemed, reward_discount_azn, membership_discount_azn
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::date, 'NEW', $10, $11, $12)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::date, 'PROCESSING', $10, $11, $12)
     RETURNING id, order_number`,
     [
       params.order_number,
@@ -90,7 +90,7 @@ async function insertOrderRow(
     ]
   );
   const row = result.rows[0];
-  await client.query(`INSERT INTO order_status_history (order_id, status) VALUES ($1, 'NEW')`, [row.id]);
+  await client.query(`INSERT INTO order_status_history (order_id, status) VALUES ($1, 'PROCESSING')`, [row.id]);
   return { id: String(row.id), order_number: String(row.order_number) };
 }
 
