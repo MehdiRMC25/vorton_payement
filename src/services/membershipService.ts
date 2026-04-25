@@ -2,10 +2,22 @@ import { pool } from '../db';
 
 /** Default levels: min_spent in AZN. 5000 → Gold, 10000 → Platinum. */
 const DEFAULT_LEVELS = [
-  { name: 'Silver', discount_percent: 5, min_spent: 0 },
-  { name: 'Gold', discount_percent: 10, min_spent: 5000 },
-  { name: 'Platinum', discount_percent: 15, min_spent: 10000 },
+  { name: 'Silver', discount_percent: 3, min_spent: 0 },
+  { name: 'Gold', discount_percent: 5, min_spent: 3000 },
+  { name: 'Platinum', discount_percent: 8, min_spent: 7200 },
+  { name: 'Platinum+', discount_percent: 10, min_spent: 12000 }
 ] as const;
+
+function aznPerUsd(): number {
+  const raw = (process.env.REWARD_AZN_PER_USD ?? '').trim();
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 1.7;
+}
+
+function usdFromAzn(azn: number): number {
+  const fx = aznPerUsd();
+  return Math.round((azn / fx) * 100) / 100;
+}
 
 /** Get membership level by name (case-insensitive). */
 export async function getMembershipLevelByName(name: string): Promise<{ id: number; name: string; discount_percent: number; min_spent: number } | null> {
@@ -76,15 +88,17 @@ export async function getCustomerTotalSpend(customerId: number): Promise<number>
 
 /**
  * Recalculate and assign the highest membership level the customer qualifies for
- * (Silver 0, Gold 5000 AZN, Platinum 10000 AZN). Call when loading account or after order completion.
+ * using USD policy thresholds from membership_levels (min_spent is stored as USD).
+ * Call when loading account or after order completion.
  */
 export async function recalculateCustomerMembership(customerId: number): Promise<void> {
   await ensureDefaultMembershipLevels();
-  const totalSpend = await getCustomerTotalSpend(customerId);
+  const totalSpendAzn = await getCustomerTotalSpend(customerId);
+  const totalSpendUsd = usdFromAzn(totalSpendAzn);
   const levels = await pool.query(
-    `SELECT id, name, discount_percent, min_spent FROM membership_levels ORDER BY min_spent DESC`
+      `SELECT id, name, discount_percent, min_spent FROM membership_levels ORDER BY min_spent DESC`
   );
-  const qualifying = levels.rows.find((row: { min_spent: number }) => Number(row.min_spent) <= totalSpend);
+  const qualifying = levels.rows.find((row: { min_spent: number }) => Number(row.min_spent) <= totalSpendUsd);
   if (!qualifying) return;
   const levelId = qualifying.id;
   const existing = await pool.query(
