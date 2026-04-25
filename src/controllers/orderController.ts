@@ -119,6 +119,13 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
         customer_id: order.customer_id != null ? Number(order.customer_id) : null,
         items: Array.isArray(order.items) ? (order.items as orderService.OrderItem[]) : [],
       });
+
+      const customerId = order.customer_id != null ? Number(order.customer_id) : NaN;
+      if (Number.isFinite(customerId) && customerId > 0) {
+        const { recalculateCustomerMembership } = await import('../services/membershipService');
+        await recalculateCustomerMembership(customerId);
+      }
+
       order = (await orderService.getOrderById(result.id)) ?? order;
       emitOrderCreated(order);
       void sendOrderNotification(order);

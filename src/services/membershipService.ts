@@ -102,28 +102,40 @@ export async function recalculateCustomerMembership(customerId: number): Promise
   if (!qualifying) return;
   const levelId = qualifying.id;
   const existing = await pool.query(
-      `SELECT id FROM customer_memberships WHERE customer_id = $1 ORDER BY start_date DESC, id DESC LIMIT 1`,
+      `SELECT id, membership_level_id
+       FROM customer_memberships
+       WHERE customer_id = $1
+         AND end_date IS NULL
+       ORDER BY start_date DESC, id DESC
+         LIMIT 1`,
       [customerId]
   );
-  if (existing.rows[0] && existing.rows[0].id) {
-    const current = await pool.query(
-      `SELECT membership_level_id FROM customer_memberships WHERE id = $1`,
-      [existing.rows[0].id]
-    );
-    if (current.rows[0]?.membership_level_id === levelId) return;
-  }
-  await assignCustomerToLevel(customerId, levelId);
-}
 
+  if (existing.rows[0]?.membership_level_id === levelId) return;
+
+  if (existing.rows[0]?.id) {
+    await pool.query(
+        `UPDATE customer_memberships
+     SET end_date = NOW()
+     WHERE id = $1`,
+        [existing.rows[0].id]
+    );
+  }
+
+  await assignCustomerToLevel(customerId, levelId, new Date(), null);
+}
 /** Get current membership level for a customer (for account page). */
 export async function getCustomerMembership(customerId: number): Promise<{ name: string; discount_percent: number; min_spent: number } | null> {
   const result = await pool.query(
-    `SELECT ml.name, ml.discount_percent, ml.min_spent
-     FROM customer_memberships cm
-     JOIN membership_levels ml ON ml.id = cm.membership_level_id
-     WHERE cm.customer_id = $1 AND (cm.end_date IS NULL OR cm.end_date >= CURRENT_DATE)
-     ORDER BY cm.start_date DESC, cm.id LIMIT 1`,
-    [customerId]
+      `SELECT ml.name, ml.discount_percent, ml.min_spent
+       FROM customer_memberships cm
+              JOIN membership_levels ml ON ml.id = cm.membership_level_id
+       WHERE cm.customer_id = $1
+         AND cm.start_date <= NOW()
+         AND (cm.end_date IS NULL OR cm.end_date > NOW())
+       ORDER BY cm.start_date DESC, cm.id DESC
+         LIMIT 1`,
+      [customerId]
   );
   const row = result.rows[0];
   return row ? { name: row.name, discount_percent: Number(row.discount_percent), min_spent: Number(row.min_spent) } : null;
