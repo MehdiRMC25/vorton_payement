@@ -13,6 +13,7 @@ import { validatePaymentAmountForOrder } from '../services/paymentOrderValidatio
 import { getTransactionDetails } from '../services/kapitalService';
 import * as orderService from '../services/orderService';
 import { tryAwardRewardPointsForOrder } from '../services/rewardPointsService';
+import { recalculateCustomerMembership } from '../services/membershipService';
 import { sendCustomerPurchaseConfirmation, sendOrderNotification } from '../services/emailService';
 import { emitOrderCreated } from '../socket';
 import { linkDeliveryLogToOrder } from '../services/deliveryContactLogService';
@@ -141,6 +142,12 @@ export async function confirm(req: Request, res: Response): Promise<void> {
             customer_id: order.customer_id != null ? Number(order.customer_id) : null,
             items: Array.isArray(order.items) ? (order.items as orderService.OrderItem[]) : [],
           });
+
+          const customerId = order.customer_id != null ? Number(order.customer_id) : NaN;
+          if (Number.isFinite(customerId) && customerId > 0) {
+            await recalculateCustomerMembership(customerId);
+          }
+
           const refreshed = await orderService.getOrderById(result.id);
           createdOrder = refreshed ?? order;
           emitOrderCreated(createdOrder);
