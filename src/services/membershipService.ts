@@ -1,6 +1,6 @@
 import { pool } from '../db';
 
-/** Default levels: min_spent in AZN. 5000 → Gold, 10000 → Platinum. */
+/** Default levels: min_spent in USD. 5000 → Gold, 10000 → Platinum. */
 const DEFAULT_LEVELS = [
   { name: 'Silver', discount_percent: 3, min_spent: 0 },
   { name: 'Gold', discount_percent: 5, min_spent: 3000 },
@@ -102,8 +102,8 @@ export async function recalculateCustomerMembership(customerId: number): Promise
   if (!qualifying) return;
   const levelId = qualifying.id;
   const existing = await pool.query(
-    `SELECT id FROM customer_memberships WHERE customer_id = $1 ORDER BY start_date DESC LIMIT 1`,
-    [customerId]
+      `SELECT id FROM customer_memberships WHERE customer_id = $1 ORDER BY start_date DESC, id DESC LIMIT 1`,
+      [customerId]
   );
   if (existing.rows[0] && existing.rows[0].id) {
     const current = await pool.query(
@@ -122,7 +122,7 @@ export async function getCustomerMembership(customerId: number): Promise<{ name:
      FROM customer_memberships cm
      JOIN membership_levels ml ON ml.id = cm.membership_level_id
      WHERE cm.customer_id = $1 AND (cm.end_date IS NULL OR cm.end_date >= CURRENT_DATE)
-     ORDER BY cm.start_date DESC LIMIT 1`,
+     ORDER BY cm.start_date DESC, cm.id LIMIT 1`,
     [customerId]
   );
   const row = result.rows[0];
