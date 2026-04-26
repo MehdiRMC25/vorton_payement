@@ -398,6 +398,28 @@ export async function computeCheckoutBreakdownForPaymentOrder(order: {
     const r = await pool.query(`SELECT COALESCE(reward_points_balance, 0)::int AS b FROM customers WHERE id = $1`, [cid]);
     balancePoints = Number(r.rows[0]?.b) || 0;
   }
+  let customerEmail: string | null = null;
+  let customerMobile: string | null = null;
+  let customerCity: string | null = null;
+  let customerCountry: string | null = null;
+
+  if (cid) {
+    const c = await pool.query(
+        `SELECT
+         NULLIF(TRIM(email), '') AS email,
+         NULLIF(TRIM(phone), '') AS phone,
+         NULLIF(TRIM(city), '') AS city,
+         NULLIF(TRIM(country), '') AS country
+       FROM customers
+       WHERE id = $1
+       LIMIT 1`,
+        [cid]
+    );
+    customerEmail = (c.rows[0]?.email as string | null) ?? null;
+    customerMobile = (c.rows[0]?.phone as string | null) ?? null;
+    customerCity = (c.rows[0]?.city as string | null) ?? null;
+    customerCountry = (c.rows[0]?.country as string | null) ?? null;
+  }
 
   const base = computeCheckoutBreakdown({
     items: order.items || [],
@@ -416,6 +438,10 @@ export async function computeCheckoutBreakdownForPaymentOrder(order: {
     promoCode: order.promo_code,
     customerId: cid,
     membershipLevelName: levelName,
+    email: customerEmail,
+    mobile: customerMobile,
+    city: order.delivery_city ?? customerCity,
+    country: order.delivery_country ?? customerCountry,
     lockUsage: false,
   });
 }
