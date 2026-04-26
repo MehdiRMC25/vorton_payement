@@ -5,6 +5,8 @@ import {
   CHECKOUT_AMOUNT_EPS,
   computeCheckoutBreakdown,
   resolveMembershipForCustomer,
+  applyPromoToBreakdown,
+  recordPromoRedemption,
 } from './checkoutTotalsService';
 
 const ALLOWED_STATUSES = ['PROCESSING', 'DISPATCHED', 'DELIVERED'] as const;
@@ -36,6 +38,8 @@ export interface CreateOrderInput {
   delivery_due_date?: string | null;
   /** Whole points to redeem; omit or 0 to pay full merchandise total. */
   points_to_redeem?: number;
+  /** Optional promo code; invalid code must not block checkout. */
+  promo_code?: string | null;
   /** With checkout_currency, shipping fee follows zone table; else from __delivery__ lines. */
   delivery_city?: string | null;
   delivery_country?: string | null;
@@ -64,6 +68,9 @@ async function insertOrderRow(
     delivery_due_date: string | null;
     pointsRedeemed: number;
     discountAzn: number;
+    promoCode: string | null;
+    promoDiscountAzn: number;
+    promoLabel: string | null;
     membershipDiscountAzn: number;
   }
 ): Promise<{ id: string; order_number: string }> {
@@ -71,8 +78,9 @@ async function insertOrderRow(
     `INSERT INTO orders (
       order_number, customer_id, customer_name, mobile, membership_level,
       address, items, total_price, delivery_due_date, status,
-      points_redeemed, reward_discount_azn, membership_discount_azn
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::date, 'PROCESSING', $10, $11, $12)
+      points_redeemed, reward_discount_azn, membership_discount_azn,
+      promo_code, promo_discount_azn, promo_label
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::date, 'PROCESSING', $10, $11, $12, $13, $14, $15)
     RETURNING id, order_number`,
     [
       params.order_number,
@@ -87,6 +95,9 @@ async function insertOrderRow(
       params.pointsRedeemed,
       params.discountAzn,
       params.membershipDiscountAzn,
+      params.promoCode,
+      params.promoDiscountAzn,
+      params.promoLabel,
     ]
   );
   const row = result.rows[0];
@@ -122,6 +133,9 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
     let discountAzn = 0;
     let newBalance = 0;
     let membershipDiscountAzn = 0;
+    let promoCodeApplied: string | null = null;
+    let promoDiscountAzn = 0;
+    let promoLabel: string | null = null;
     const cid =
       input.customer_id != null && Number.isFinite(Number(input.customer_id))
         ? Number(input.customer_id)
@@ -142,7 +156,7 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
       balancePoints = Number(balRes.rows[0].b) || 0;
     }
 
-    const breakdown = computeCheckoutBreakdown({
+    const baseBreakdown = computeCheckoutBreakdown({
       items: input.items || [],
       pointsRequested: ptsReq,
       balancePoints,
@@ -155,9 +169,20 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
       },
     });
 
+    const breakdown = await applyPromoToBreakdown(baseBreakdown, {
+      promoCode: input.promo_code ?? null,
+      customerId: Number.isFinite(cid) ? cid : null,
+      membershipLevelName: membershipResolvedName,
+      lockUsage: true,
+      client,
+    });
+
     pointsRedeemed = breakdown.pointsRedeemed;
     discountAzn = breakdown.pointsDiscountAzn;
     membershipDiscountAzn = breakdown.membershipDiscountAzn;
+    promoCodeApplied = breakdown.promo_code ?? null;
+    promoDiscountAzn = Number(breakdown.promo_discount_azn ?? 0);
+    promoLabel = breakdown.promo_label ?? null;
     const net = breakdown.payableTotalAzn;
 
     if (ptsReq > 0 && Number.isFinite(cid) && cid > 0) {
@@ -182,6 +207,9 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
       delivery_due_date: input.delivery_due_date ?? null,
       pointsRedeemed,
       discountAzn,
+      promoCode: promoCodeApplied,
+      promoDiscountAzn,
+      promoLabel,
       membershipDiscountAzn,
     });
 
@@ -196,6 +224,16 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
         ) VALUES ($1, $2, $3, $4, $5, 'redeem')`,
         [cid, row.id, -pointsRedeemed, newBalance, discountAzn]
       );
+    }
+
+    if (promoCodeApplied && promoDiscountAzn > 0) {
+      await recordPromoRedemption({
+        client,
+        promoCode: promoCodeApplied,
+        customerId: Number.isFinite(cid) ? cid : null,
+        orderId: row.id,
+        promoDiscountAzn,
+      });
     }
 
     await client.query('COMMIT');
@@ -220,6 +258,9 @@ export async function getAllOrders(): Promise<Record<string, unknown>[]> {
             COALESCE(o.reward_discount_azn, 0)::numeric AS reward_discount_azn,
             COALESCE(o.membership_discount_azn, 0)::numeric AS membership_discount_azn,
             COALESCE(o.points_earned, 0)::int AS points_earned,
+       o.promo_code,
+            COALESCE(o.promo_discount_azn, 0)::numeric AS promo_discount_azn,
+       o.promo_label,
             (SELECT osh.created_at FROM order_status_history osh
              WHERE osh.order_id = o.id AND osh.status = 'DELIVERED'
              ORDER BY osh.created_at DESC LIMIT 1) AS delivered_at
@@ -235,7 +276,10 @@ export async function getOrderById(id: string): Promise<Record<string, unknown> 
               address, items, total_price, order_date, delivery_due_date, status, created_at, updated_at,
               COALESCE(points_redeemed, 0)::int AS points_redeemed,
               COALESCE(reward_discount_azn, 0)::numeric AS reward_discount_azn,
-              COALESCE(membership_discount_azn, 0)::numeric AS membership_discount_azn,
+         COALESCE(membership_discount_azn, 0)::numeric AS membership_discount_azn,
+         promo_code,
+              COALESCE(promo_discount_azn, 0)::numeric AS promo_discount_azn,
+         promo_label,
               COALESCE(points_earned, 0)::int AS points_earned
        FROM orders WHERE id = $1`,
       [id]
@@ -268,6 +312,9 @@ export async function getOrdersByCustomerId(customerId: number): Promise<Record<
             COALESCE(points_redeemed, 0)::int AS points_redeemed,
             COALESCE(reward_discount_azn, 0)::numeric AS reward_discount_azn,
             COALESCE(membership_discount_azn, 0)::numeric AS membership_discount_azn,
+            promo_code,
+            COALESCE(promo_discount_azn, 0)::numeric AS promo_discount_azn,
+            promo_label,
             COALESCE(points_earned, 0)::int AS points_earned
      FROM orders WHERE customer_id = $1 ORDER BY order_date DESC`,
     [customerId]
@@ -325,6 +372,9 @@ function formatOrderRow(row: Record<string, unknown>): Record<string, unknown> {
     points_earned: row.points_earned != null ? Number(row.points_earned) : 0,
     points_redeemed: row.points_redeemed != null ? Number(row.points_redeemed) : 0,
     reward_discount_azn: row.reward_discount_azn != null ? Number(row.reward_discount_azn) : 0,
+    promo_code: row.promo_code != null && row.promo_code !== '' ? toStr(row.promo_code) : null,
+    promo_discount_azn: row.promo_discount_azn != null ? Number(row.promo_discount_azn) : 0,
+    promo_label: row.promo_label != null && row.promo_label !== '' ? toStr(row.promo_label) : null,
     membership_discount_azn: row.membership_discount_azn != null ? Number(row.membership_discount_azn) : 0,
     created_at: createdAt instanceof Date ? createdAt.toISOString() : toStr(createdAt),
     updated_at: updatedAt instanceof Date ? updatedAt.toISOString() : toStr(updatedAt),

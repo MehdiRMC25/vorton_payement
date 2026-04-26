@@ -129,6 +129,54 @@ async function start(): Promise<void> {
           UNIQUE (order_id, reason)
         )
       `);
+      await poolReward.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_code VARCHAR(80)');
+      await poolReward.query(
+        'ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_discount_azn NUMERIC(12,2) NOT NULL DEFAULT 0'
+      );
+      await poolReward.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_label VARCHAR(200)');
+      await poolReward.query(`
+        CREATE TABLE IF NOT EXISTS promo_codes (
+          id SERIAL PRIMARY KEY,
+          code VARCHAR(80) NOT NULL UNIQUE,
+          label VARCHAR(200) NOT NULL,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          starts_at TIMESTAMPTZ,
+          ends_at TIMESTAMPTZ,
+          discount_type VARCHAR(16) NOT NULL CHECK (discount_type IN ('percent', 'fixed')),
+          discount_value NUMERIC(12,4) NOT NULL CHECK (discount_value > 0),
+          discount_cap_azn NUMERIC(12,2),
+          min_merchandise_azn NUMERIC(12,2),
+          max_total_uses INT,
+          max_uses_per_customer INT,
+          combinable_with_membership BOOLEAN NOT NULL DEFAULT TRUE,
+          combinable_with_points BOOLEAN NOT NULL DEFAULT TRUE,
+          eligible_membership_levels TEXT[],
+          eligible_customer_ids INT[],
+          eligible_emails TEXT[],
+          eligible_mobiles TEXT[],
+          eligible_cities TEXT[],
+          eligible_countries TEXT[],
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await poolReward.query(`
+        CREATE TABLE IF NOT EXISTS promo_code_redemptions (
+          id BIGSERIAL PRIMARY KEY,
+          promo_id INT NOT NULL REFERENCES promo_codes(id) ON DELETE CASCADE,
+          customer_id INT REFERENCES customers(id) ON DELETE SET NULL,
+          order_id VARCHAR(64) NOT NULL UNIQUE,
+          discount_azn NUMERIC(12,2) NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await poolReward.query('CREATE INDEX IF NOT EXISTS idx_promo_codes_code ON promo_codes(code)');
+      await poolReward.query(
+        'CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo_id ON promo_code_redemptions(promo_id)'
+      );
+      await poolReward.query(
+        'CREATE INDEX IF NOT EXISTS idx_promo_redemptions_customer_id ON promo_code_redemptions(customer_id)'
+      );
       await poolReward.query(
         'CREATE INDEX IF NOT EXISTS idx_reward_points_ledger_customer_id ON reward_points_ledger(customer_id)'
       );

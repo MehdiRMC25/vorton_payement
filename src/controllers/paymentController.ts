@@ -124,6 +124,7 @@ export async function confirm(req: Request, res: Response): Promise<void> {
           points_to_redeem: pts > 0 ? pts : undefined,
           delivery_city: p.delivery_city ?? null,
           delivery_country: p.delivery_country ?? null,
+          promo_code: p.promo_code ?? null,
           checkout_currency: p.checkout_currency ?? null,
         });
         const logId =

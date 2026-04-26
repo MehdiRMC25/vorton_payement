@@ -23,6 +23,7 @@ export async function validatePaymentAmountForOrder(
     points_to_redeem: order.points_to_redeem,
     delivery_city: order.delivery_city,
     delivery_country: order.delivery_country,
+    promo_code: order.promo_code,
     checkout_currency: order.checkout_currency,
   });
   if (Math.abs(Number(amount) - breakdown.payableTotalAzn) > CHECKOUT_AMOUNT_EPS) {

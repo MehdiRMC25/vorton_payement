@@ -23,6 +23,10 @@ export interface CheckoutBreakdown {
   pointsDiscountAzn: number;
   /** Amount to charge: (merchandise after membership − points) + shipping */
   payableTotalAzn: number;
+  promo_code?: string | null;
+  promo_discount_azn?: number;
+  promo_label?: string | null;
+  promo_error_code?: string | null;
   membershipCatalogFraction: number;
   membershipLevelName: string | null;
   /** When shipping came from delivery_country + checkout_currency policy (not summed from __delivery__ lines). */
@@ -134,7 +138,146 @@ export async function resolveMembershipForCustomer(
     return { fraction: 0, levelName: null };
   }
 }
+function norm(v?: string | null): string | null {
+  const s = String(v ?? '').trim();
+  return s ? s.toUpperCase() : null;
+}
 
+function ci(list: unknown): string[] {
+  return Array.isArray(list) ? list.map((x) => String(x).trim().toLowerCase()).filter(Boolean) : [];
+}
+
+function canUse(list: unknown, value: string | null | undefined): boolean {
+  const allow = ci(list);
+  if (allow.length === 0) return true;
+  const v = String(value ?? '').trim().toLowerCase();
+  return !!v && allow.includes(v);
+}
+
+export async function applyPromoToBreakdown(
+    base: CheckoutBreakdown,
+    args: {
+      promoCode?: string | null;
+      customerId?: number | null;
+      membershipLevelName?: string | null;
+      mobile?: string | null;
+      email?: string | null;
+      city?: string | null;
+      country?: string | null;
+      lockUsage?: boolean;
+      client?: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> };
+    }
+): Promise<CheckoutBreakdown> {
+  const code = norm(args.promoCode);
+  if (!code) return { ...base, promo_code: null, promo_discount_azn: 0, promo_label: null, promo_error_code: null };
+
+  const q = args.client ?? pool;
+  const rowRes = await q.query(
+      `SELECT *
+     FROM promo_codes
+     WHERE UPPER(code) = $1
+     LIMIT 1`,
+      [code]
+  );
+  const p = rowRes.rows[0];
+  if (!p) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: null, promo_error_code: 'INVALID_PROMO_CODE' };
+
+  const now = new Date();
+  if (p.is_active !== true) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_INACTIVE' };
+  if (p.starts_at && now < new Date(String(p.starts_at))) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_STARTED' };
+  if (p.ends_at && now > new Date(String(p.ends_at))) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_EXPIRED' };
+
+  const cid = Number(args.customerId);
+  const maxTotal = Number(p.max_total_uses);
+  if (args.lockUsage && Number.isFinite(maxTotal) && maxTotal > 0) {
+    const used = await q.query(`SELECT COUNT(*)::int AS n FROM promo_code_redemptions WHERE promo_id = $1`, [p.id]);
+    if ((Number(used.rows[0]?.n) || 0) >= maxTotal) {
+      return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_USAGE_LIMIT_REACHED' };
+    }
+  }
+
+  const maxPer = Number(p.max_uses_per_customer);
+  if (args.lockUsage && Number.isFinite(cid) && cid > 0 && Number.isFinite(maxPer) && maxPer > 0) {
+    const used = await q.query(
+        `SELECT COUNT(*)::int AS n FROM promo_code_redemptions WHERE promo_id = $1 AND customer_id = $2`,
+        [p.id, cid]
+    );
+    if ((Number(used.rows[0]?.n) || 0) >= maxPer) {
+      return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_PER_ACCOUNT_LIMIT_REACHED' };
+    }
+  }
+
+  if (!canUse(p.eligible_membership_levels, args.membershipLevelName)) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_ELIGIBLE' };
+  if (!canUse(p.eligible_emails, args.email)) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_ELIGIBLE' };
+  if (!canUse(p.eligible_mobiles, args.mobile)) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_ELIGIBLE' };
+  if (!canUse(p.eligible_cities, args.city)) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_ELIGIBLE' };
+  if (!canUse(p.eligible_countries, args.country)) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_ELIGIBLE' };
+
+  if (Array.isArray(p.eligible_customer_ids) && p.eligible_customer_ids.length > 0) {
+    const allowIds = p.eligible_customer_ids.map((x: unknown) => Number(x)).filter((n: number) => Number.isFinite(n));
+    if (!Number.isFinite(cid) || !allowIds.includes(cid)) {
+      return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_ELIGIBLE' };
+    }
+  }
+
+  if (p.combinable_with_membership === false && base.membershipDiscountAzn > 0) {
+    return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_COMBINABLE' };
+  }
+  if (p.combinable_with_points === false && base.pointsDiscountAzn > 0) {
+    return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_COMBINABLE' };
+  }
+
+  const discountType = String(p.discount_type ?? '').toLowerCase();
+  const discountValue = Number(p.discount_value) || 0;
+  const cap = Number(p.discount_cap_azn) || 0;
+  const floor = Number(p.min_merchandise_azn) || 0;
+
+  const promoBase = round2(Math.max(0, base.merchandiseAfterMembershipAzn - base.pointsDiscountAzn));
+  if (promoBase < floor) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_MIN_NOT_MET' };
+
+  let promoDiscount = 0;
+  if (discountType === 'percent') promoDiscount = round2((promoBase * discountValue) / 100);
+  if (discountType === 'fixed') promoDiscount = round2(discountValue);
+
+  if (cap > 0) promoDiscount = Math.min(promoDiscount, cap);
+  promoDiscount = round2(Math.min(Math.max(0, promoDiscount), promoBase));
+
+  return {
+    ...base,
+    promo_code: code,
+    promo_discount_azn: promoDiscount,
+    promo_label: String(p.label ?? ''),
+    promo_error_code: null,
+    payableTotalAzn: round2(Math.max(0, promoBase - promoDiscount) + base.shippingAzn),
+  };
+}
+
+export async function recordPromoRedemption(args: {
+  client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> };
+  promoCode: string;
+  orderId: string;
+  customerId?: number | null;
+  promoDiscountAzn: number;
+}): Promise<void> {
+  const code = norm(args.promoCode);
+  if (!code || args.promoDiscountAzn <= 0) return;
+
+  const p = await args.client.query(`SELECT id FROM promo_codes WHERE UPPER(code) = $1 LIMIT 1`, [code]);
+  const promoId = Number(p.rows[0]?.id);
+  if (!Number.isFinite(promoId) || promoId <= 0) return;
+
+  await args.client.query(
+      `INSERT INTO promo_code_redemptions (promo_id, customer_id, order_id, discount_azn)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (order_id) DO NOTHING`,
+      [
+        promoId,
+        args.customerId != null && Number.isFinite(Number(args.customerId)) ? Number(args.customerId) : null,
+        args.orderId,
+        round2(args.promoDiscountAzn),
+      ]
+  );
+}
 /**
  * Core calculation — all monetary policy in one place.
  * Points redemption base = merchandise after membership (excl. shipping), per stacking order.
@@ -238,6 +381,7 @@ export async function computeCheckoutBreakdownForPaymentOrder(order: {
   points_to_redeem?: number;
   delivery_city?: string | null;
   delivery_country?: string | null;
+  promo_code?: string | null;
   checkout_currency?: string | null;
 }): Promise<CheckoutBreakdown> {
   const cid =
@@ -255,7 +399,7 @@ export async function computeCheckoutBreakdownForPaymentOrder(order: {
     balancePoints = Number(r.rows[0]?.b) || 0;
   }
 
-  return computeCheckoutBreakdown({
+  const base = computeCheckoutBreakdown({
     items: order.items || [],
     pointsRequested: pts,
     balancePoints,
@@ -266,6 +410,13 @@ export async function computeCheckoutBreakdownForPaymentOrder(order: {
       delivery_country: order.delivery_country,
       checkout_currency: order.checkout_currency,
     },
+  });
+
+  return applyPromoToBreakdown(base, {
+    promoCode: order.promo_code,
+    customerId: cid,
+    membershipLevelName: levelName,
+    lockUsage: false,
   });
 }
 
@@ -302,6 +453,10 @@ export function mismatchPayload(
       pointsDiscountAzn: breakdown.pointsDiscountAzn,
       pointsRedeemed: breakdown.pointsRedeemed,
       expectedPayableAzn: breakdown.payableTotalAzn,
+      promo_code: breakdown.promo_code ?? null,
+      promo_discount_azn: breakdown.promo_discount_azn ?? 0,
+      promo_label: breakdown.promo_label ?? null,
+      promo_error_code: breakdown.promo_error_code ?? null,
       membershipLevelName: breakdown.membershipLevelName,
       membershipCatalogFraction: breakdown.membershipCatalogFraction,
     },

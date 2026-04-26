@@ -1,9 +1,7 @@
 import { Request, Response } from 'express';
-import { pool } from '../db';
 import type { OrderItem } from '../services/orderService';
 import {
-  computeCheckoutBreakdown,
-  resolveMembershipForCustomer,
+  computeCheckoutBreakdownForPaymentOrder,
   type CheckoutBreakdown,
 } from '../services/checkoutTotalsService';
 
@@ -34,6 +32,10 @@ function previewJson(breakdown: CheckoutBreakdown, extra: Record<string, unknown
       payableTotalAzn: breakdown.payableTotalAzn,
       membershipLevelName: breakdown.membershipLevelName,
       membershipCatalogFraction: breakdown.membershipCatalogFraction,
+      promo_code: breakdown.promo_code ?? null,
+      promo_discount_azn: breakdown.promo_discount_azn ?? 0,
+      promo_label: breakdown.promo_label ?? null,
+      promo_error_code: breakdown.promo_error_code ?? null,
     },
   };
 }
@@ -75,20 +77,21 @@ export async function previewCheckout(req: Request, res: Response): Promise<void
       return;
     }
 
-    const { fraction, levelName } = await resolveMembershipForCustomer(uid);
-    const balRes = await pool.query(
-      `SELECT COALESCE(reward_points_balance, 0)::int AS b FROM customers WHERE id = $1`,
-      [uid]
-    );
-    const balancePoints = Number(balRes.rows[0]?.b) || 0;
+    const promoCode =
+        body.promo_code != null
+            ? String(body.promo_code)
+            : body.promoCode != null
+                ? String(body.promoCode)
+                : null;
 
-    const breakdown = computeCheckoutBreakdown({
+    const breakdown = await computeCheckoutBreakdownForPaymentOrder({
+      customer_id: uid,
       items,
-      pointsRequested: pts,
-      balancePoints,
-      membershipCatalogFraction: fraction,
-      membershipLevelName: levelName,
-      shipping: ship,
+      points_to_redeem: pts,
+      delivery_city: ship.delivery_city,
+      delivery_country: ship.delivery_country,
+      checkout_currency: ship.checkout_currency,
+      promo_code: promoCode,
     });
 
     res.json(previewJson(breakdown, { audience: 'member' }));
@@ -126,13 +129,21 @@ export async function previewCheckoutGuest(req: Request, res: Response): Promise
       return;
     }
 
-    const breakdown = computeCheckoutBreakdown({
+    const promoCode =
+        body.promo_code != null
+            ? String(body.promo_code)
+            : body.promoCode != null
+                ? String(body.promoCode)
+                : null;
+
+    const breakdown = await computeCheckoutBreakdownForPaymentOrder({
+      customer_id: undefined,
       items,
-      pointsRequested: 0,
-      balancePoints: 0,
-      membershipCatalogFraction: 0,
-      membershipLevelName: null,
-      shipping: ship,
+      points_to_redeem: 0,
+      delivery_city: ship.delivery_city,
+      delivery_country: ship.delivery_country,
+      checkout_currency: ship.checkout_currency,
+      promo_code: promoCode,
     });
 
     res.json(
