@@ -239,7 +239,12 @@ export async function applyPromoToBreakdown(
   const cap = Number(p.discount_cap_azn) || 0;
   const floor = Number(p.min_merchandise_azn) || 0;
 
-  const promoBase = round2(Math.max(0, base.merchandiseAfterMembershipAzn - base.pointsDiscountAzn));
+  const fullPriceAfterMembership = round2(
+      Math.max(0, Number(base.membershipEligibleSubtotalAzn) - Number(base.membershipDiscountAzn))
+  );
+  const promoBaseSource =
+      p.combinable_with_site_discounts === false ? fullPriceAfterMembership : Number(base.merchandiseAfterMembershipAzn);
+  const promoBase = round2(Math.max(0, promoBaseSource - Number(base.pointsDiscountAzn)));
   if (promoBase < floor) return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_MIN_NOT_MET' };
 
   let promoDiscount = 0;
@@ -255,7 +260,10 @@ export async function applyPromoToBreakdown(
     promo_discount_azn: promoDiscount,
     promo_label: String(p.label ?? ''),
     promo_error_code: null,
-    payableTotalAzn: round2(Math.max(0, promoBase - promoDiscount) + base.shippingAzn),
+    payableTotalAzn: round2(
+        Math.max(0, Number(base.merchandiseAfterMembershipAzn) - Number(base.pointsDiscountAzn) - promoDiscount) +
+        Number(base.shippingAzn)
+    ),
   };
 }
 
