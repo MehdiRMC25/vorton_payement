@@ -134,6 +134,9 @@ async function start(): Promise<void> {
         'ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_discount_azn NUMERIC(12,2) NOT NULL DEFAULT 0'
       );
       await poolReward.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS promo_label VARCHAR(200)');
+      await poolReward.query(
+          'ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS combinable_with_site_discounts BOOLEAN NOT NULL DEFAULT TRUE'
+      );
       await poolReward.query(`
         CREATE TABLE IF NOT EXISTS promo_codes (
           id SERIAL PRIMARY KEY,
@@ -151,6 +154,7 @@ async function start(): Promise<void> {
           combinable_with_membership BOOLEAN NOT NULL DEFAULT TRUE,
           combinable_with_points BOOLEAN NOT NULL DEFAULT TRUE,
           eligible_membership_levels TEXT[],
+          combinable_with_site_discounts BOOLEAN NOT NULL DEFAULT TRUE,
           eligible_customer_ids INT[],
           eligible_emails TEXT[],
           eligible_mobiles TEXT[],

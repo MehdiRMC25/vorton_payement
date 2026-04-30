@@ -227,6 +227,13 @@ export async function applyPromoToBreakdown(
     return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_COMBINABLE' };
   }
 
+  const hasSiteDiscountLines =
+      Number(base.membershipEligibleSubtotalAzn) + 0.0001 < Number(base.merchandiseSubtotalBeforeMembershipAzn);
+
+  if (p.combinable_with_site_discounts === false && hasSiteDiscountLines) {
+    return { ...base, promo_code: code, promo_discount_azn: 0, promo_label: String(p.label ?? ''), promo_error_code: 'PROMO_NOT_COMBINABLE' };
+  }
+
   const discountType = String(p.discount_type ?? '').toLowerCase();
   const discountValue = Number(p.discount_value) || 0;
   const cap = Number(p.discount_cap_azn) || 0;
