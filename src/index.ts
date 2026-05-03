@@ -17,6 +17,7 @@ import { syncStaffAccounts } from './services/staffAccountsService';
 import * as authController from './controllers/authController';
 import { downloadRouter } from './routes/download';
 import { testPaymentsRouter } from './routes/testPayments';
+import { promotionsRouter } from './routes/promotions';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use(config.apiPrefix + '/payments', paymentRouter);
 app.use(config.apiPrefix + '/webhooks', webhookRouter);
 app.use(config.apiPrefix + '/auth', authRouter);
 app.use(config.apiPrefix + '/checkout', checkoutRouter);
+app.use(config.apiPrefix + '/promotions', promotionsRouter);
 app.use(config.apiPrefix + '/orders', ordersRouter);
 app.use('/api', productsRouter);
 app.post('/auth/signup', authController.signup);
