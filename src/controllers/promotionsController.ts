@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { isPromoCodeInCampaignWindow, loadPromoCodeByCode } from '../services/promoCampaignService';
 
 type ActiveCampaignResponse = {
   active: boolean;
@@ -65,13 +66,29 @@ export async function getActiveCampaign(_req: Request, res: Response): Promise<v
     const ctaHref = parsed.ctaHref != null ? String(parsed.ctaHref).trim() : '';
     const endsAt = parsed.endsAt != null ? String(parsed.endsAt).trim() : '';
 
+    let resolvedPromoCode = promoCode;
+    let resolvedEndsAt = endsAt;
+
+    if (promoCode) {
+      const row = await loadPromoCodeByCode(promoCode);
+      if (!row || !isPromoCodeInCampaignWindow(row)) {
+        res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
+        res.json(inactive());
+        return;
+      }
+      resolvedPromoCode = String(row.code).trim();
+      if (row.ends_at) {
+        resolvedEndsAt = new Date(String(row.ends_at)).toISOString();
+      }
+    }
+
     if (ctaLabel && (!ctaHref || !isHttpsUrl(ctaHref))) {
       res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
       res.json(inactive());
       return;
     }
 
-    if (endsAt) {
+    if (!promoCode && endsAt) {
       const t = Date.parse(endsAt);
       if (!Number.isFinite(t) || Date.now() > t) {
         res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
@@ -85,10 +102,10 @@ export async function getActiveCampaign(_req: Request, res: Response): Promise<v
       campaignId,
       title,
       message,
-      ...(promoCode ? { promoCode } : {}),
+      ...(resolvedPromoCode ? { promoCode: resolvedPromoCode } : {}),
       ...(ctaLabel ? { ctaLabel } : {}),
       ...(ctaHref ? { ctaHref } : {}),
-      ...(endsAt ? { endsAt } : {}),
+      ...(resolvedEndsAt ? { endsAt: resolvedEndsAt } : {}),
     };
 
     res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
