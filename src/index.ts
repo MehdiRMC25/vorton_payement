@@ -141,6 +141,9 @@ async function start(): Promise<void> {
       );
       await poolReward.query(`
         CREATE TABLE IF NOT EXISTS promo_codes (
+         await poolReward.query(
+         'ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS show_on_home BOOLEAN NOT NULL DEFAULT FALSE'
+        );
           id SERIAL PRIMARY KEY,
           code VARCHAR(80) NOT NULL UNIQUE,
           label VARCHAR(200) NOT NULL,

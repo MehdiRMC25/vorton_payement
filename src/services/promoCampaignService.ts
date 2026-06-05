@@ -30,3 +30,15 @@ export function isPromoCodeInCampaignWindow(row: PromoCodeRow): boolean {
   if (row.ends_at && now > new Date(String(row.ends_at))) return false;
   return true;
 }
+
+/** Promo flagged for home billboard; at most one should have show_on_home = TRUE. */
+export async function loadFeaturedHomePromo(): Promise<PromoCodeRow | null> {
+  const res = await pool.query<PromoCodeRow>(
+      `SELECT id, code, label, is_active, starts_at, ends_at
+     FROM promo_codes
+     WHERE show_on_home = TRUE
+     ORDER BY updated_at DESC, id DESC
+     LIMIT 1`
+  );
+  return res.rows[0] ?? null;
+}
