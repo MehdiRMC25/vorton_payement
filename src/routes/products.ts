@@ -37,6 +37,16 @@ router.get('/home-videos', async (_req: Request, res: Response) => {
 })
 
 /** GET /api/product-variants/:baseSku */
+
+/** GET /api/home-news */
+router.get('/home-news', async (_req: Request, res: Response) => {
+  try {
+    const items = await productsService.getHomeNews()
+    res.json({ ok: true, items })
+  } catch (e) {
+    res.status(500).json({ ok: false, items: [] })
+  }
+})
 router.get('/product-variants/:baseSku', async (req: Request, res: Response) => {
   try {
     const baseSku = req.params.baseSku
