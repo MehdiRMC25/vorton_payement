@@ -478,7 +478,9 @@ export async function getHomeNews(): Promise<Record<string, unknown>[]> {
     const doc = await db.collection<{ _id: string; items?: unknown[] }>('News').findOne({ _id: 'home' })
     const items = doc?.items
     if (!Array.isArray(items)) return []
-    return items.filter((x) => x && typeof x === 'object')
+    return items.filter(
+        (x): x is Record<string, unknown> => x != null && typeof x === 'object' && !Array.isArray(x)
+    )
   } catch (err) {
     console.warn('[products] getHomeNews failed:', (err as Error).message)
     return []
