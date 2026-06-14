@@ -450,7 +450,7 @@ export async function computeCheckoutBreakdownForPaymentOrder(order: {
     mobile: customerMobile,
     city: order.delivery_city ?? customerCity,
     country: order.delivery_country ?? customerCountry,
-    lockUsage: false,
+    lockUsage: cid != null && cid > 0,
   });
 }
 
