@@ -87,6 +87,10 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
     const delivery_city = body.delivery_city != null ? String(body.delivery_city) : null;
     const delivery_country = body.delivery_country != null ? String(body.delivery_country) : null;
     const checkout_currency = body.checkout_currency != null ? String(body.checkout_currency) : null;
+    const promo_code =
+        body.promo_code != null && String(body.promo_code).trim() !== ''
+            ? String(body.promo_code).trim().toUpperCase()
+            : null;
 
     if (!customer_id || !customer_name || !mobile) {
       res.status(400).json({ error: 'customer_id, customer_name, and mobile are required' });
@@ -110,6 +114,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
       delivery_city,
       delivery_country,
       checkout_currency,
+      promo_code,
     });
 
     let order = await orderService.getOrderById(result.id);

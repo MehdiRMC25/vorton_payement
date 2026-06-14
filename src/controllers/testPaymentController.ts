@@ -65,6 +65,7 @@ export async function forceSuccess(req: Request, res: Response): Promise<void> {
                 delivery_city: p.delivery_city ?? null,
                 delivery_country: p.delivery_country ?? null,
                 checkout_currency: p.checkout_currency ?? null,
+                promo_code: p.promo_code ?? null,
             });
 
             const logId =

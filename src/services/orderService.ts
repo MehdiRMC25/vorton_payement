@@ -155,6 +155,29 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
       }
       balancePoints = Number(balRes.rows[0].b) || 0;
     }
+    let customerEmail: string | null = null;
+    let customerMobile: string | null = null;
+    let customerCity: string | null = null;
+    let customerCountry: string | null = null;
+
+    if (Number.isFinite(cid) && cid > 0) {
+      const c = await client.query(
+          `SELECT
+         NULLIF(TRIM(email), '') AS email,
+         NULLIF(TRIM(phone), '') AS phone,
+         NULLIF(TRIM(city), '') AS city,
+         NULLIF(TRIM(country), '') AS country
+       FROM customers
+       WHERE id = $1
+       LIMIT 1`,
+          [cid]
+      );
+      customerEmail = (c.rows[0]?.email as string | null) ?? null;
+      customerMobile = (c.rows[0]?.phone as string | null) ?? null;
+      customerCity = (c.rows[0]?.city as string | null) ?? null;
+      customerCountry = (c.rows[0]?.country as string | null) ?? null;
+    }
+
 
     const baseBreakdown = computeCheckoutBreakdown({
       items: input.items || [],
@@ -173,6 +196,10 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
       promoCode: input.promo_code ?? null,
       customerId: Number.isFinite(cid) ? cid : null,
       membershipLevelName: membershipResolvedName,
+      email: customerEmail,
+      mobile: customerMobile,
+      city: input.delivery_city ?? customerCity,
+      country: input.delivery_country ?? customerCountry,
       lockUsage: true,
       client,
     });
