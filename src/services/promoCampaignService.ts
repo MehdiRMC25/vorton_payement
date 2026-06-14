@@ -7,6 +7,10 @@ export type PromoCodeRow = {
   is_active: boolean;
   starts_at: string | Date | null;
   ends_at: string | Date | null;
+  home_title_az: string | null;
+  home_title_en: string | null;
+  home_message_az: string | null;
+  home_message_en: string | null;
 };
 
 export async function loadPromoCodeByCode(code: string): Promise<PromoCodeRow | null> {
@@ -34,11 +38,12 @@ export function isPromoCodeInCampaignWindow(row: PromoCodeRow): boolean {
 /** Promo flagged for home billboard; at most one should have show_on_home = TRUE. */
 export async function loadFeaturedHomePromo(): Promise<PromoCodeRow | null> {
   const res = await pool.query<PromoCodeRow>(
-      `SELECT id, code, label, is_active, starts_at, ends_at
-     FROM promo_codes
-     WHERE show_on_home = TRUE
-     ORDER BY updated_at DESC, id DESC
-     LIMIT 1`
+      `SELECT id, code, label, is_active, starts_at, ends_at,
+              home_title_az, home_title_en, home_message_az, home_message_en
+       FROM promo_codes
+       WHERE show_on_home = TRUE
+       ORDER BY updated_at DESC, id DESC
+           LIMIT 1`
   );
   return res.rows[0] ?? null;
 }

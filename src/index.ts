@@ -139,6 +139,18 @@ async function start(): Promise<void> {
       await poolReward.query(
           'ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS combinable_with_site_discounts BOOLEAN NOT NULL DEFAULT TRUE'
       );
+      await poolReward.query(
+          'ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS home_title_az VARCHAR(200)'
+      );
+      await poolReward.query(
+          'ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS home_title_en VARCHAR(200)'
+      );
+      await poolReward.query(
+          'ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS home_message_az TEXT'
+      );
+      await poolReward.query(
+          'ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS home_message_en TEXT'
+      );
       await poolReward.query(`
         CREATE TABLE IF NOT EXISTS promo_codes (
          await poolReward.query(

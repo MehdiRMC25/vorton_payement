@@ -7,7 +7,18 @@ export async function getActiveCampaign(_req: Request, res: Response): Promise<v
     const row = await loadFeaturedHomePromo();
     const active = row != null && isPromoCodeInCampaignWindow(row);
     res.set('Cache-Control', cache);
-    res.json({ active });
+    if (!active || row == null) {
+      res.json({ active: false });
+      return;
+    }
+    res.json({
+      active: true,
+      code: row.code,
+      titleAz: row.home_title_az ?? '',
+      titleEn: row.home_title_en ?? '',
+      messageAz: row.home_message_az ?? '',
+      messageEn: row.home_message_en ?? '',
+    });
   } catch {
     res.set('Cache-Control', cache);
     res.json({ active: false });
