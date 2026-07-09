@@ -70,36 +70,34 @@ export async function getCustomerByEmailOrPhone(identifier: string) {
         OR phone = $2
         OR second_phone = $2
         OR third_phone = $2`,
-    [id, id]
+      [id, id]
   );
+  return result.rows[0];
+}
 
-  /** Find customer by primary, second, or third email (case-insensitive). */
-  export async function getCustomerByAnyEmail(email: string) {
-    const result = await pool.query(
-        `SELECT * FROM customers
+/** Find customer by primary, second, or third email (case-insensitive). */
+export async function getCustomerByAnyEmail(email: string) {
+  const result = await pool.query(
+      `SELECT * FROM customers
      WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
         OR LOWER(TRIM(second_email)) = LOWER(TRIM($1))
         OR LOWER(TRIM(third_email)) = LOWER(TRIM($1))
      LIMIT 1`,
-        [email.trim()]
-    );
-    return result.rows[0];
-  }
-
-  export async function updateCustomerPassword(
-      customerId: number,
-      passwordHash: string,
-      passwordSalt: string | null
-  ): Promise<void> {
-    await pool.query(`UPDATE customers SET password_hash = $1, password_salt = $2 WHERE id = $3`, [
-      passwordHash,
-      passwordSalt,
-      customerId,
-    ]);
-  }
-
-
+      [email.trim()]
+  );
   return result.rows[0];
+}
+
+export async function updateCustomerPassword(
+    customerId: number,
+    passwordHash: string,
+    passwordSalt: string | null
+): Promise<void> {
+  await pool.query(`UPDATE customers SET password_hash = $1, password_salt = $2 WHERE id = $3`, [
+    passwordHash,
+    passwordSalt,
+    customerId,
+  ]);
 }
 
 /** Use for API responses. Excludes password_hash and password_salt. Includes role for access control. */
