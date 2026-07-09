@@ -113,6 +113,31 @@ export async function sendEmailChangeCode(to: string, code: string): Promise<boo
   }
 }
 
+export async function sendPasswordResetCode(to: string, code: string): Promise<boolean> {
+  const { host, port, user, pass, fromOtp, fromOrders } = config.email;
+  const from = (fromOtp || fromOrders || "").trim();
+  if (!host || !user || !pass || !from) {
+    console.warn(
+        "[Email] Skipping password reset code: EMAIL_HOST, EMAIL_USER, EMAIL_PASS, and sender must be configured"
+    );
+    return false;
+  }
+  const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+  try {
+    await transporter.sendMail({
+      from,
+      to,
+      subject: "[Vorton] Password reset code",
+      text: `Your password reset code is: ${code}\n\nThis code expires in 15 minutes. If you did not request this, you can ignore this email.`,
+    });
+    console.log("[Email] Password reset code sent to", to);
+    return true;
+  } catch (err) {
+    console.error("[Email] Password reset code failed:", err);
+    return false;
+  }
+}
+
 export async function sendOrderNotification(order: OrderForEmail): Promise<boolean> {
   const { host, port, user, pass, fromOrders, to } = config.email;
   const from = (fromOrders ?? '').trim();

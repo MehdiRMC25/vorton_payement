@@ -72,6 +72,33 @@ export async function getCustomerByEmailOrPhone(identifier: string) {
         OR third_phone = $2`,
     [id, id]
   );
+
+  /** Find customer by primary, second, or third email (case-insensitive). */
+  export async function getCustomerByAnyEmail(email: string) {
+    const result = await pool.query(
+        `SELECT * FROM customers
+     WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
+        OR LOWER(TRIM(second_email)) = LOWER(TRIM($1))
+        OR LOWER(TRIM(third_email)) = LOWER(TRIM($1))
+     LIMIT 1`,
+        [email.trim()]
+    );
+    return result.rows[0];
+  }
+
+  export async function updateCustomerPassword(
+      customerId: number,
+      passwordHash: string,
+      passwordSalt: string | null
+  ): Promise<void> {
+    await pool.query(`UPDATE customers SET password_hash = $1, password_salt = $2 WHERE id = $3`, [
+      passwordHash,
+      passwordSalt,
+      customerId,
+    ]);
+  }
+
+
   return result.rows[0];
 }
 

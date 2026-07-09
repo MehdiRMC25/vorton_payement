@@ -9,11 +9,15 @@ import {
 } from '../controllers/authProfileController';
 import * as cartController from '../controllers/cartController';
 
+import { requestPasswordResetCode, resetPasswordWithCode } from '../controllers/authPasswordController';
+
 const router = Router();
 
 router.post('/signup', signup);
 router.post('/login', login);
 router.get('/me', me);
+router.post('/password/forgot', requestPasswordResetCode);
+router.post('/password/reset', resetPasswordWithCode);
 router.post('/account/request-deletion', requireAuth, requireActiveAccount, requestAccountDeletion);
 router.post('/account/cancel-deletion', requireAuth, cancelAccountDeletion);
 
