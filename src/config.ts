@@ -99,5 +99,9 @@ export const config = {
     accountDeletion: {
       graceDays: Math.max(1, parseInt(process.env.ACCOUNT_DELETION_GRACE_DAYS ?? '14', 10) || 14),
     },
+    /** Days before a pending-deletion account is archived and removed. */
+    accountDeletion: {
+      graceDays: Math.max(1, parseInt(process.env.ACCOUNT_DELETION_GRACE_DAYS ?? '14', 10) || 14),
+    },
   },
 } as const;
