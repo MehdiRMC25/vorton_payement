@@ -87,8 +87,12 @@ export async function getCustomerByIdSafe(id: number) {
             COALESCE(reward_points_balance, 0)::int AS loyalty_credits,
             COALESCE(email_verified, FALSE) AS email_verified,
             COALESCE(second_email_verified, FALSE) AS second_email_verified,
-            COALESCE(third_email_verified, FALSE) AS third_email_verified
-          FROM customers WHERE id = $1`,
+            COALESCE(third_email_verified, FALSE) AS third_email_verified,
+            COALESCE(account_status, 'active') AS account_status,
+            deletion_requested_at,
+            scheduled_deletion_at,
+            deletion_reason
+     FROM customers WHERE id = $1`,
     [id]
   );
   return result.rows[0];
@@ -175,4 +179,96 @@ export async function patchCustomerProfile(id: number, patch: CustomerProfilePat
   }
   values.push(id);
   await pool.query(`UPDATE customers SET ${sets.join(', ')} WHERE id = $${i}`, values);
+}
+
+export async function requestCustomerDeletion(
+    customerId: number,
+    deletionReason: string | null,
+    graceDays: number
+): Promise<{ scheduled_deletion_at: string } | null> {
+  const result = await pool.query(
+      `UPDATE customers
+     SET account_status = 'pending_deletion',
+         deletion_requested_at = NOW(),
+         scheduled_deletion_at = NOW() + ($2::int * INTERVAL '1 day'),
+         deletion_reason = $3
+     WHERE id = $1
+       AND COALESCE(account_status, 'active') = 'active'
+     RETURNING scheduled_deletion_at`,
+      [customerId, graceDays, deletionReason]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return { scheduled_deletion_at: String(row.scheduled_deletion_at) };
+}
+
+export async function cancelCustomerDeletion(customerId: number): Promise<boolean> {
+  const result = await pool.query(
+      `UPDATE customers
+     SET account_status = 'active',
+         deletion_requested_at = NULL,
+         scheduled_deletion_at = NULL,
+         deletion_reason = NULL
+     WHERE id = $1
+       AND account_status = 'pending_deletion'`,
+      [customerId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function archiveAndDeleteCustomer(customerId: number): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const locked = await client.query(
+        `SELECT id, deletion_reason
+       FROM customers
+       WHERE id = $1
+         AND account_status = 'pending_deletion'
+       FOR UPDATE`,
+        [customerId]
+    );
+    if (!locked.rows[0]) {
+      await client.query('ROLLBACK');
+      return;
+    }
+
+    const reason = locked.rows[0].deletion_reason ?? null;
+
+    await client.query(
+        `INSERT INTO customers_deleted_archive
+       SELECT c.*, NOW(), $2::text
+       FROM customers c
+       WHERE c.id = $1`,
+        [customerId, reason]
+    );
+
+    await client.query('DELETE FROM cart_items WHERE user_id = $1', [customerId]);
+    await client.query('UPDATE orders SET customer_id = NULL WHERE customer_id = $1', [customerId]);
+    await client.query('DELETE FROM customers WHERE id = $1', [customerId]);
+
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+export async function finalizeDueAccountDeletions(): Promise<number> {
+  const due = await pool.query(
+      `SELECT id
+     FROM customers
+     WHERE account_status = 'pending_deletion'
+       AND scheduled_deletion_at IS NOT NULL
+       AND scheduled_deletion_at <= NOW()`
+  );
+  let count = 0;
+  for (const row of due.rows) {
+    await archiveAndDeleteCustomer(Number(row.id));
+    count += 1;
+  }
+  return count;
 }

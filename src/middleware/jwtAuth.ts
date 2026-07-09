@@ -47,11 +47,29 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       last_name: user.last_name,
       email: user.email,
       phone: user.phone,
+      account_status: String(user.account_status || 'active'),
+      scheduled_deletion_at: user.scheduled_deletion_at ?? null,
     };
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
   }
+}
+/** Block accounts scheduled for deletion from normal app access. */
+export function requireActiveAccount(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  if (req.user.account_status === 'pending_deletion') {
+    res.status(403).json({
+      error: 'Account is scheduled for deletion.',
+      code: 'ACCOUNT_PENDING_DELETION',
+      scheduled_deletion_at: req.user.scheduled_deletion_at ?? null,
+    });
+    return;
+  }
+  next();
 }
 
 /** Require one of the given roles. Call after requireAuth. */

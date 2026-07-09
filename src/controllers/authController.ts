@@ -7,6 +7,8 @@ import {
   createCustomer,
   getCustomerByEmailOrPhone,
   getCustomerByIdSafe,
+  requestCustomerDeletion,
+  cancelCustomerDeletion,
 } from '../services/customerService';
 import { assignSilverToNewCustomer, recalculateCustomerMembership, getCustomerMembership } from '../services/membershipService';
 
@@ -329,5 +331,72 @@ export async function me(req: Request, res: Response): Promise<void> {
       console.warn('[Auth] Token verification failed:', msg);
     }
     res.status(401).json({ error: 'Not authenticated.' });
+  }
+}
+
+/** POST /api/v1/auth/account/request-deletion */
+export async function requestAccountDeletion(req: Request, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const role = String(req.user?.role ?? 'customer');
+    if (role !== 'customer') {
+      res.status(403).json({ error: 'Staff accounts cannot be deleted from the app.' });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const reasonRaw = pickTrimmedStringAllowEmpty(body, [
+      'deletion_reason',
+      'deletionReason',
+      'reason',
+    ]);
+    const deletionReason = reasonRaw && reasonRaw.length > 0 ? reasonRaw.slice(0, 500) : null;
+
+    const scheduled = await requestCustomerDeletion(
+        userId,
+        deletionReason,
+        config.accountDeletion.graceDays
+    );
+    if (!scheduled) {
+      res.status(409).json({ error: 'Account is already scheduled for deletion.' });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      account_status: 'pending_deletion',
+      scheduled_deletion_at: scheduled.scheduled_deletion_at,
+    });
+  } catch (err) {
+    console.error('Request account deletion error:', err);
+    res.status(500).json({ error: 'Could not schedule account deletion. Please try again later.' });
+  }
+}
+
+/** POST /api/v1/auth/account/cancel-deletion */
+export async function cancelAccountDeletion(req: Request, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const ok = await cancelCustomerDeletion(userId);
+    if (!ok) {
+      res.status(409).json({ error: 'Account is not scheduled for deletion.' });
+      return;
+    }
+
+    const user = await getCustomerByIdSafe(userId);
+    res.json({ ok: true, user });
+  } catch (err) {
+    console.error('Cancel account deletion error:', err);
+    res.status(500).json({ error: 'Could not reactivate account. Please try again later.' });
   }
 }

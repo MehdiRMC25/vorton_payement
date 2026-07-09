@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { signup, login, me } from '../controllers/authController';
-import { requireAuth } from '../middleware/jwtAuth';
+import { signup, login, me, requestAccountDeletion, cancelAccountDeletion } from '../controllers/authController';
+import { requireAuth, requireActiveAccount } from '../middleware/jwtAuth';
 import {
   patchProfile,
   requestEmailChangeCode,
@@ -14,18 +14,20 @@ const router = Router();
 router.post('/signup', signup);
 router.post('/login', login);
 router.get('/me', me);
+router.post('/account/request-deletion', requireAuth, requireActiveAccount, requestAccountDeletion);
+router.post('/account/cancel-deletion', requireAuth, cancelAccountDeletion);
 
-router.patch('/profile', requireAuth, patchProfile);
-router.post('/profile/email/request-code', requireAuth, requestEmailChangeCode);
-router.post('/profile/email/confirm', requireAuth, confirmEmailChange);
-router.post('/checkout-delivery', requireAuth, appendCheckoutDelivery);
+router.patch('/profile', requireAuth, requireActiveAccount, patchProfile);
+router.post('/profile/email/request-code', requireAuth, requireActiveAccount, requestEmailChangeCode);
+router.post('/profile/email/confirm', requireAuth, requireActiveAccount, confirmEmailChange);
+router.post('/checkout-delivery', requireAuth, requireActiveAccount, appendCheckoutDelivery);
 
 /** Server-side cart (PostgreSQL cart_items) — requires Bearer JWT */
-router.get('/cart', requireAuth, cartController.getCart);
-router.put('/cart/items', requireAuth, cartController.putCartItem);
-router.delete('/cart/items', requireAuth, cartController.removeCartItem);
-router.post('/cart/sync', requireAuth, cartController.syncCart);
-router.delete('/cart', requireAuth, cartController.deleteCartAll);
+router.get('/cart', requireAuth, requireActiveAccount, cartController.getCart);
+router.put('/cart/items', requireAuth, requireActiveAccount, cartController.putCartItem);
+router.delete('/cart/items', requireAuth, requireActiveAccount, cartController.removeCartItem);
+router.post('/cart/sync', requireAuth, requireActiveAccount, cartController.syncCart);
+router.delete('/cart', requireAuth, requireActiveAccount, cartController.deleteCartAll);
 
 export const authRouter = router;
 

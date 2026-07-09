@@ -95,5 +95,9 @@ export const config = {
     azOtherFeeAzn: envFloat('SHIPPING_AZ_OTHER_FEE_AZN', 10),
     /** International only: USD added for each merchandise unit after the first (sum of line qty, excl. __delivery__). */
     intlExtraUsdPerAdditionalUnit: envNonNegativeFloat('SHIPPING_INTL_EXTRA_USD_PER_ADDITIONAL_ITEM', 6),
+    /** Days before a pending-deletion account is archived and removed. */
+    accountDeletion: {
+      graceDays: Math.max(1, parseInt(process.env.ACCOUNT_DELETION_GRACE_DAYS ?? '14', 10) || 14),
+    },
   },
 } as const;

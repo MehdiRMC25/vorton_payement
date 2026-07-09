@@ -14,6 +14,7 @@ import { productsRouter } from './routes/products';
 import { checkoutRouter } from './routes/checkout';
 import { setIO } from './socket';
 import { syncStaffAccounts } from './services/staffAccountsService';
+import { startAccountDeletionScheduler } from './services/accountDeletionService';
 import * as authController from './controllers/authController';
 import { downloadRouter } from './routes/download';
 import { testPaymentsRouter } from './routes/testPayments';
@@ -311,6 +312,7 @@ async function start(): Promise<void> {
     cors: { origin: config.corsOrigins.length > 0 ? config.corsOrigins : true, credentials: true },
   });
   setIO(io);
+  startAccountDeletionScheduler();
 
   server.listen(config.port, () => {
     console.log(`Payment backend running on port ${config.port}`);
