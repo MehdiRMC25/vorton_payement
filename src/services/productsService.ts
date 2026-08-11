@@ -12,7 +12,7 @@ let indexesCreated = false
 
 const CACHE_TTL_MS = 60 * 1000
 /** Bump when normalized product shape changes so stale entries are not reused. */
-const PRODUCTS_CACHE_VERSION = 4
+const PRODUCTS_CACHE_VERSION = 5
 const serverCache: {
   all: { data: Record<string, unknown>[]; ts: number; v: number } | null
   byCategory: Record<string, { data: Record<string, unknown>[]; ts: number; v: number }>
@@ -254,7 +254,10 @@ function normalize(doc: Record<string, unknown> | null, versionMap: Map<string, 
       sizes = str.split(',').map((s) => s.trim()).filter(Boolean)
     }
   }
-  if (sizes.length === 0) sizes = ['S', 'M', 'L', 'XL']
+  if (!hasPositiveStock(doc)) {
+    sizes = []
+  }
+  const soldOut = !hasPositiveStock(doc) || sizes.length === 0
 
   const rawName = doc.name ?? doc.Name ?? doc.ADI ?? doc.productName ?? doc.product_name ?? doc.productTitle ?? doc.product_title
       ?? doc['Product Name'] ?? doc['Product Title']
@@ -313,6 +316,7 @@ function normalize(doc: Record<string, unknown> | null, versionMap: Map<string, 
     price: Number(doc.price) || 0,
     discountedPrice: doc.discountedPrice != null ? Number(doc.discountedPrice) : null,
     sizes,
+    soldOut,
     image: image || undefined,
     images: images.length ? images : undefined,
     thumbnailUrl: thumb,
@@ -340,7 +344,6 @@ export async function getAllProducts(): Promise<{ list: Record<string, unknown>[
     const products = docs
         .map((d) => {
           const doc = d as Record<string, unknown>
-          if (isStockOnly(doc)) return null
           if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
@@ -378,7 +381,6 @@ export async function getProductById(id: string): Promise<Record<string, unknown
           { projection: PROJECTION }
       ) as Record<string, unknown> | null
     }
-    if (doc && isStockOnly(doc)) return null
     if (doc && !hasPositiveStock(doc)) return null
     const { existingIds, versionMap } = await getCloudinaryImageData()
     const primaryPublicId = doc ? getPrimaryPublicIdForDoc(doc) : null
@@ -411,7 +413,6 @@ export async function getProductsByCategory(category: string): Promise<Record<st
     const products = docs
         .map((d) => {
           const doc = d as Record<string, unknown>
-          if (isStockOnly(doc)) return null
           if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
@@ -453,7 +454,6 @@ export async function getVariantsByBaseSku(baseSku: string): Promise<Record<stri
     return docs
         .map((d) => {
           const doc = d as Record<string, unknown>
-          if (isStockOnly(doc)) return null
           if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
