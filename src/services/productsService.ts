@@ -44,6 +44,7 @@ const PROJECTION = {
   isNewCollection: 1, is_new_collection: 1, IsNewCollection: 1, newCollection: 1,
   isDiscounted: 1, is_discounted: 1,
   Display: 1, display: 1,
+  availableStock: 1,
   'Available Stock': 1,
 }
 
@@ -82,7 +83,7 @@ function isStockOnly(doc: Record<string, unknown>): boolean {
 
 /** Require Available Stock >= 1 (number or numeric string from sheet sync). */
 function hasPositiveStock(doc: Record<string, unknown>): boolean {
-  const raw = doc['Available Stock']
+  const raw = doc.availableStock ?? doc['Available Stock']
   const n = Number(String(raw ?? '').replace(',', '.').trim())
   return Number.isFinite(n) && n >= 1
 }
