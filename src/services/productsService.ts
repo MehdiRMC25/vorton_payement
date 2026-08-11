@@ -12,7 +12,7 @@ let indexesCreated = false
 
 const CACHE_TTL_MS = 60 * 1000
 /** Bump when normalized product shape changes so stale entries are not reused. */
-const PRODUCTS_CACHE_VERSION = 3
+const PRODUCTS_CACHE_VERSION = 4
 const serverCache: {
   all: { data: Record<string, unknown>[]; ts: number; v: number } | null
   byCategory: Record<string, { data: Record<string, unknown>[]; ts: number; v: number }>
@@ -44,6 +44,7 @@ const PROJECTION = {
   isNewCollection: 1, is_new_collection: 1, IsNewCollection: 1, newCollection: 1,
   isDiscounted: 1, is_discounted: 1,
   Display: 1, display: 1,
+  'Stok Toplam Miqdar': 1,
 }
 
 /** Only products marked online; explicitly exclude stock_only in all common variations. */
@@ -77,6 +78,13 @@ function isStockOnly(doc: Record<string, unknown>): boolean {
   if (STOCK_ONLY_VALUES.some((v) => v.toLowerCase() === d)) return true
   const normalized = d.replace(/[\s\-_]/g, '')
   return normalized === 'stockonly'
+}
+
+/** Require Stok Toplam Miqdar >= 1 (number or numeric string from sheet sync). */
+function hasPositiveStock(doc: Record<string, unknown>): boolean {
+  const raw = doc['Stok Toplam Miqdar']
+  const n = Number(String(raw ?? '').replace(',', '.').trim())
+  return Number.isFinite(n) && n >= 1
 }
 
 function hasMongoUri(): boolean {
@@ -333,6 +341,7 @@ export async function getAllProducts(): Promise<{ list: Record<string, unknown>[
         .map((d) => {
           const doc = d as Record<string, unknown>
           if (isStockOnly(doc)) return null
+          if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
           try { return normalize(doc, versionMap) } catch (e) { console.warn('[products] normalize failed:', (e as Error).message); return null }
@@ -370,6 +379,7 @@ export async function getProductById(id: string): Promise<Record<string, unknown
       ) as Record<string, unknown> | null
     }
     if (doc && isStockOnly(doc)) return null
+    if (doc && !hasPositiveStock(doc)) return null
     const { existingIds, versionMap } = await getCloudinaryImageData()
     const primaryPublicId = doc ? getPrimaryPublicIdForDoc(doc) : null
     if (doc && !passesImageFilter(doc, primaryPublicId, existingIds)) return null
@@ -402,6 +412,7 @@ export async function getProductsByCategory(category: string): Promise<Record<st
         .map((d) => {
           const doc = d as Record<string, unknown>
           if (isStockOnly(doc)) return null
+          if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
           try { return normalize(doc, versionMap) } catch (e) { return null }
@@ -443,6 +454,7 @@ export async function getVariantsByBaseSku(baseSku: string): Promise<Record<stri
         .map((d) => {
           const doc = d as Record<string, unknown>
           if (isStockOnly(doc)) return null
+          if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
           try { return normalize(doc, versionMap) } catch (e) { return null }
@@ -453,6 +465,7 @@ export async function getVariantsByBaseSku(baseSku: string): Promise<Record<stri
     return []
   }
 }
+
 
 export async function getHomeVideos(): Promise<string[]> {
   if (!hasMongoUri()) return []
