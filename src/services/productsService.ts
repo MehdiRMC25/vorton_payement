@@ -44,7 +44,7 @@ const PROJECTION = {
   isNewCollection: 1, is_new_collection: 1, IsNewCollection: 1, newCollection: 1,
   isDiscounted: 1, is_discounted: 1,
   Display: 1, display: 1,
-  'Stok Toplam Miqdar': 1,
+  'Available Stock': 1,
 }
 
 /** Only products marked online; explicitly exclude stock_only in all common variations. */
@@ -80,9 +80,9 @@ function isStockOnly(doc: Record<string, unknown>): boolean {
   return normalized === 'stockonly'
 }
 
-/** Require Stok Toplam Miqdar >= 1 (number or numeric string from sheet sync). */
+/** Require Available Stock >= 1 (number or numeric string from sheet sync). */
 function hasPositiveStock(doc: Record<string, unknown>): boolean {
-  const raw = doc['Stok Toplam Miqdar']
+  const raw = doc['Available Stock']
   const n = Number(String(raw ?? '').replace(',', '.').trim())
   return Number.isFinite(n) && n >= 1
 }
