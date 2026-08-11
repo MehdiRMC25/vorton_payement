@@ -12,7 +12,7 @@ let indexesCreated = false
 
 const CACHE_TTL_MS = 60 * 1000
 /** Bump when normalized product shape changes so stale entries are not reused. */
-const PRODUCTS_CACHE_VERSION = 5
+const PRODUCTS_CACHE_VERSION = 6
 const serverCache: {
   all: { data: Record<string, unknown>[]; ts: number; v: number } | null
   byCategory: Record<string, { data: Record<string, unknown>[]; ts: number; v: number }>
@@ -345,7 +345,6 @@ export async function getAllProducts(): Promise<{ list: Record<string, unknown>[
     const products = docs
         .map((d) => {
           const doc = d as Record<string, unknown>
-          if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
           try { return normalize(doc, versionMap) } catch (e) { console.warn('[products] normalize failed:', (e as Error).message); return null }
@@ -382,7 +381,6 @@ export async function getProductById(id: string): Promise<Record<string, unknown
           { projection: PROJECTION }
       ) as Record<string, unknown> | null
     }
-    if (doc && !hasPositiveStock(doc)) return null
     const { existingIds, versionMap } = await getCloudinaryImageData()
     const primaryPublicId = doc ? getPrimaryPublicIdForDoc(doc) : null
     if (doc && !passesImageFilter(doc, primaryPublicId, existingIds)) return null
@@ -414,7 +412,6 @@ export async function getProductsByCategory(category: string): Promise<Record<st
     const products = docs
         .map((d) => {
           const doc = d as Record<string, unknown>
-          if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
           try { return normalize(doc, versionMap) } catch (e) { return null }
@@ -455,7 +452,6 @@ export async function getVariantsByBaseSku(baseSku: string): Promise<Record<stri
     return docs
         .map((d) => {
           const doc = d as Record<string, unknown>
-          if (!hasPositiveStock(doc)) return null
           const primaryPublicId = getPrimaryPublicIdForDoc(doc)
           if (!passesImageFilter(doc, primaryPublicId, existingIds)) return null
           try { return normalize(doc, versionMap) } catch (e) { return null }
